@@ -1,0 +1,12 @@
+[package]
+name = "virtual-lorawan"
+version = "0.1.0"
+authors = ["lthiery <louis@helium.com>"]
+edition = "2018"
+
+[dependencies.tokio]
+version = "0.2.21"
+features = ["full"]
+
+[dependencies]
+semtech-udp = { path = "../semtech-udp" }
