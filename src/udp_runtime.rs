@@ -5,43 +5,46 @@
  */
 use tokio::net::UdpSocket;
 use tokio::net::udp::{RecvHalf, SendHalf};
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, Sender, Receiver};
 use std::net::SocketAddr;
 
-type ChannelMessage = (Vec<u8>, SocketAddr);
+type RxMessage = (Vec<u8>, SocketAddr);
+type TxMessage = Vec<u8>;
 
 pub struct UdpRuntimeRx {
-    sender: mpsc::Sender<ChannelMessage>,
+    sender: Sender<RxMessage>,
     socket_recv: RecvHalf,
 }
 
 pub struct UdpRuntimeTx {
-    sender: mpsc::Sender<ChannelMessage>,
-    receiver: mpsc::Receiver<ChannelMessage>,
+    receiver: Receiver<TxMessage>,
     socket_send: SendHalf,
 }
 
 pub struct UdpRuntime;
 
 impl UdpRuntime {
-    pub async fn new(host: SocketAddr) -> Result<(UdpRuntimeRx, UdpRuntimeTx), Box<dyn std::error::Error>> {
+    pub async fn new(host: SocketAddr) -> Result<(Receiver<RxMessage>, UdpRuntimeRx, Sender<TxMessage>, UdpRuntimeTx), Box<dyn std::error::Error>> {
         let mut socket = UdpSocket::bind(&host).await?;
         // "connecting" filters for only frames from the server
         socket.connect("127.0.0.1:1680").await?;
         // send something so that server can know about us
         socket.send(&[0]).await?;
-        let (sender, receiver) = mpsc::channel(100);
+        let (mut rx_sender, mut rx_receiver) = mpsc::channel(100);
+        let (mut tx_sender, mut tx_receiver) = mpsc::channel(100);
+
         let (mut socket_recv, socket_send) = socket.split();
-        let sender_clone = sender.clone();
         Ok(
-            (UdpRuntimeRx {
-                sender,
+            (
+            rx_receiver,
+            UdpRuntimeRx {
+                sender: rx_sender,
                 socket_recv,
             },
-             UdpRuntimeTx {
-                 receiver,
+            tx_sender,
+            UdpRuntimeTx {
+                 receiver: tx_receiver,
                  socket_send,
-                 sender: sender_clone
              },
             )
         )
@@ -64,13 +67,13 @@ impl UdpRuntimeRx {
 }
 
 impl UdpRuntimeTx {
-    pub fn new_sender_channel(&self) -> mpsc::Sender<ChannelMessage> {
-        self.sender.clone()
-    }
-
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let msg = self.receiver.recv().await;
+            let tx = self.receiver.recv().await;
+            if let Some(data) = tx {
+                self.socket_send.send(data.as_slice());
+
+            }
         }
     }
 }
