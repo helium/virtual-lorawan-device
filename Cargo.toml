@@ -13,3 +13,4 @@ semtech-udp = { path = "../semtech-udp" }
 lorawan-device = { path = "../rust-lorawan/device" }
 rand = "0.7.3"
 heapless = "0.5.4"
+base64 = "*"
