@@ -31,10 +31,10 @@ impl UdpRuntime {
         socket.connect("127.0.0.1:1680").await?;
         // send something so that server can know about us
         socket.send(&[0]).await?;
-        let (mut rx_sender, mut rx_receiver) = mpsc::channel(100);
-        let (mut tx_sender, mut tx_receiver) = mpsc::channel(100);
+        let (rx_sender, rx_receiver) = mpsc::channel(100);
+        let (tx_sender, tx_receiver) = mpsc::channel(100);
 
-        let (mut socket_recv, socket_send) = socket.split();
+        let (socket_recv, socket_send) = socket.split();
         Ok(
             (
             rx_receiver,
@@ -73,8 +73,8 @@ impl UdpRuntimeTx {
         loop {
             let tx = self.receiver.recv().await;
             if let Some(data) = tx {
-                data.serialize(&mut buf);
-                self.socket_send.send(&buf);
+                data.serialize(&mut buf)?;
+                self.socket_send.send(&buf).await?;
                 buf.clear();
             }
         }

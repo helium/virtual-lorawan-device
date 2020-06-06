@@ -1,9 +1,9 @@
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use super::udp_runtime::{RxMessage, TxMessage};
-use tokio::sync::mpsc::{self, Sender, Receiver};
+use tokio::sync::mpsc::Sender;
 use base64;
-use semtech_udp::{PacketData, PushData, RxPk, gateway_mac};
+use semtech_udp::{PacketData, PushData, RxPk};
 use lorawan_device::{Radio, radio::*};
 
 struct Settings {
@@ -96,7 +96,7 @@ impl Radio for UdpRadio {
         });
         let rxpk = Some(packet);
 
-        semtech_udp::Packet {
+        let packet = semtech_udp::Packet {
             random_token: 0xAB,
             gateway_mac: None,
             data: PacketData::PushData(PushData{
@@ -104,6 +104,11 @@ impl Radio for UdpRadio {
                 stat: None,
             })
         };
+
+        if let Err(e) = self.sender.try_send(packet) {
+            panic!("UdpTx Queue Overflow! {}", e)
+        }
+
     }
 
     fn set_frequency(&mut self, frequency_mhz: u32) {
@@ -141,7 +146,7 @@ impl Radio for UdpRadio {
 
     }
 
-    fn handle_event(&mut self, event: Self::Event) -> State {
+    fn handle_event(&mut self, _event: Self::Event) -> State {
         State::TxDone
     }
 }
