@@ -4,7 +4,12 @@ use super::udp_runtime::{RxMessage, TxMessage};
 use tokio::sync::mpsc::Sender;
 use base64;
 use semtech_udp::{PacketData, PushData, RxPk};
-use lorawan_device::{Radio, radio::*};
+use lorawan_device::{Radio, radio::*, Event as LorawanEvent};
+
+pub enum Event {
+    RxMsg(RxMessage),
+    LoRaWAN(LorawanEvent),
+}
 
 struct Settings {
     bw: Bandwidth,
@@ -71,7 +76,7 @@ impl UdpRadio {
 }
 
 impl Radio for UdpRadio {
-    type Event = RxMessage;
+    type Event = Event;
 
     fn send(&mut self, buffer: &mut [u8]) {
         let size = buffer.len() as u64;

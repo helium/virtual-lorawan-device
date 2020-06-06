@@ -7,6 +7,8 @@ use lorawan_device::{Device as LoRaWanDevice};
 use rand::Rng;
 use std::sync::Mutex;
 use std::{time, thread};
+use tokio::sync::mpsc;
+use crate::udp_runtime::UdpRuntimeTx;
 
 static RANDOM: Option<Mutex<Vec<u32>>> = None;
 
@@ -61,20 +63,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut radio = UdpRadio::new(sender);
 
 
-    let mut lorawan: LoRaWanDevice<UdpRadio, udp_runtime::RxMessage> = LoRaWanDevice::new(
-        [0x83, 0x19, 0x20, 0xB5, 0x5C, 0x1E, 0x16, 0x7C],
-        [0x11, 0x6B, 0x8A, 0x61, 0x3E, 0x37, 0xA1, 0x0C],
+    let mut lorawan: LoRaWanDevice<UdpRadio, udp_radio::Event>= LoRaWanDevice::new(
+        [0x55, 0x6C, 0xB6, 0x1E, 0x37, 0xC5, 0x3C, 0x00],
+        [0xB9, 0x94, 0x02, 0xD0, 0x7E, 0xD5, 0xB3, 0x70],
         [
-            0xAC, 0xC3, 0x87, 0x2A, 0x2F, 0x82, 0xED, 0x20, 0x47, 0xED, 0x18, 0x92, 0xD6, 0xFC,
-            0x8C, 0x0E,
+            0xBF, 0x40, 0xD3, 0x0E, 0x4E, 0x23, 0x42, 0x8E, 0xF6, 0x82, 0xCA, 0x77, 0x64, 0xCD, 0xB4, 0x23
         ],
         get_random_u32,
     );
 
-    // this pushes received UDP packets into the lorawan device
+
+    let (mut lorawan_sender, mut lorawan_receiver) = mpsc::channel(100);
+
+    // this translates raw UDP received into a udp_radio event
     tokio::spawn(async move {
         loop {
             if let Some(event) = receiver.recv().await {
+                lorawan_sender.send(udp_radio::Event::RxMsg(event)).await;
+            }
+        }
+    });
+
+
+    // this receives all events and dispatches
+    tokio::spawn(async move {
+        loop {
+            if let Some(event) = lorawan_receiver.recv().await {
                 lorawan.handle_radio_event(&mut radio, event);
             }
         }
