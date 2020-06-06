@@ -3,7 +3,7 @@ use base64;
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use lorawan_device::{radio::*, Event as LorawanEvent, Radio};
-use semtech_udp::{PacketData, PushData, RxPk};
+use semtech_udp::{PacketData, PushData, RxPk, gateway_mac};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug)]
@@ -53,6 +53,10 @@ impl Settings {
             CodingRate::_4_8 => "4/8",
         }
         .to_string()
+    }
+
+    fn get_freq(&self) -> f64 {
+        self.freq as f64 / 1_000_000.0
     }
 }
 
@@ -122,33 +126,39 @@ impl Radio for UdpRadio {
     type Event = RadioEvent;
 
     fn send(&mut self, buffer: &mut [u8]) {
+        println!("Sending!");
         let size = buffer.len() as u64;
         let data = base64::encode(buffer);
 
         let mut packet = Vec::new();
+        println!("{} {}", self.settings.get_codr(), self.settings.get_datr());
         packet.push({
             RxPk {
                 chan: 0,
                 codr: self.settings.get_codr(),
                 data,
                 datr: self.settings.get_datr(),
-                freq: 0.0,
+                freq: self.settings.get_freq(),
                 lsnr: 5.5,
                 modu: "LORA".to_string(),
-                rfch: 5,
+                rfch: 0,
                 rssi: -112,
                 size,
                 stat: 1,
-                tmst: 32,
+                tmst: 320000,
             }
         });
         let rxpk = Some(packet);
 
+        let foo = [0x12,0x45,0x32,0x42,0x33,0x00,0x00, 0x12,0x23,0x32,0x3,0x3];
+
         let packet = semtech_udp::Packet {
-            random_token: 0xAB,
-            gateway_mac: None,
+            random_token: 0x00,
+            gateway_mac: Some(gateway_mac(&foo)),
             data: PacketData::PushData(PushData { rxpk, stat: None }),
         };
+
+        println!("{:?}",packet);
 
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)

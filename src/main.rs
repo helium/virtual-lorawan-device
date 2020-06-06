@@ -8,25 +8,31 @@ use std::sync::Mutex;
 use std::{thread, time};
 use udp_radio::UdpRadio;
 
-static RANDOM: Option<Mutex<Vec<u32>>> = None;
+static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
 
 // this is a workaround so that we can have a global function for random u32
 fn get_random_u32() -> u32 {
-    if let Some(mutex) = &RANDOM {
-        let mut random = mutex.lock().unwrap();
-        if let Some(number) = random.pop() {
-            number
+    //0xFFFF
+    unsafe {
+        if let Some(mutex) = &RANDOM {
+            let mut random = mutex.lock().unwrap();
+            if let Some(number) = random.pop() {
+                number
+            } else {
+                panic!("Random queue empty!")
+            }
         } else {
-            panic!("Random queue empty!")
+            panic!("Random queue not uninitialized!")
         }
-    } else {
-        panic!("Random queue not uninitialized!")
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let socket_addr = SocketAddr::from(([0, 0, 0, 0], 1324));
+    unsafe {
+        RANDOM = Some(Mutex::new(Vec::new()));
+    }
+    let socket_addr = SocketAddr::from(([0, 0, 0, 0], 1685));
 
     let (mut receiver, mut udp_runtime_rx, sender, mut udp_runtime_tx) =
         UdpRuntime::new(socket_addr).await?;
@@ -46,15 +52,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // this is a workaround so that we can have a global function for random u32
     // it basically maintains 32 random u32's in a vector
     thread::spawn(move || {
+        println!("queue started");
         let mut rng = rand::thread_rng();
-        if let Some(mutex) = &RANDOM {
-            let mut random = mutex.lock().unwrap();
-            while random.len() < 32 {
-                random.push(rng.gen())
+        unsafe {
+            if let Some(mutex) = &RANDOM {
+                let mut random = mutex.lock().unwrap();
+                println!("pushing");
+
+                while random.len() < 32 {
+                    println!("pushed");
+
+                    random.push(rng.gen())
+                }
             }
+            thread::sleep(time::Duration::from_millis(100));
         }
-        thread::sleep(time::Duration::from_millis(100));
+
     });
+
 
     // UdpRadio implements the LoRaWAN device Radio trait
     // it sends packets via the sender channel to the UDP runtime
@@ -75,20 +90,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_random_u32,
     );
 
-    tokio::spawn(async move {
-        loop {
-            if let Some(event) = lorawan_receiver.recv().await {
-                let response = match event {
-                    udp_radio::Event::Radio(radio_event) => {
-                        lorawan.handle_radio_event(&mut radio, radio_event)
-                    }
-                    udp_radio::Event::LoRaWAN(lorawan_event) => {
-                        lorawan.handle_event(&mut radio, lorawan_event)
-                    }
-                };
-            }
-        }
-    });
+    thread::sleep(time::Duration::from_millis(1000));
 
-    Ok(())
+    lorawan_sender.try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin));
+
+    //tokio::spawn(async move {
+    loop {
+        if let Some(event) = lorawan_receiver.recv().await {
+            let response = match event {
+                udp_radio::Event::Radio(radio_event) => {
+                    lorawan.handle_radio_event(&mut radio, radio_event)
+                }
+                udp_radio::Event::LoRaWAN(lorawan_event) => {
+                    lorawan.handle_event(&mut radio, lorawan_event)
+                }
+            };
+        }
+    }
+    //});
+
+    //loop {}
 }

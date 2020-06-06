@@ -78,8 +78,8 @@ impl UdpRuntimeTx {
         loop {
             let tx = self.receiver.recv().await;
             if let Some(data) = tx {
-                data.serialize(&mut buf)?;
-                self.socket_send.send(&buf).await?;
+                let n = data.serialize(&mut buf)? as usize;
+                self.socket_send.send(&buf[..n]).await?;
                 buf.clear();
             }
         }
