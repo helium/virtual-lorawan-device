@@ -2,13 +2,11 @@ use std::net::SocketAddr;
 mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
-use udp_radio::UdpRadio;
-use lorawan_device::{Device as LoRaWanDevice};
+use lorawan_device::{Device as LoRaWanDevice, Event as LoRaWanEvent};
 use rand::Rng;
 use std::sync::Mutex;
-use std::{time, thread};
-use tokio::sync::mpsc;
-use crate::udp_runtime::UdpRuntimeTx;
+use std::{thread, time};
+use udp_radio::UdpRadio;
 
 static RANDOM: Option<Mutex<Vec<u32>>> = None;
 
@@ -30,7 +28,8 @@ fn get_random_u32() -> u32 {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let socket_addr = SocketAddr::from(([0, 0, 0, 0], 1324));
 
-    let (mut receiver, mut udp_runtime_rx, sender, mut udp_runtime_tx) = UdpRuntime::new(socket_addr).await?;
+    let (mut receiver, mut udp_runtime_rx, sender, mut udp_runtime_tx) =
+        UdpRuntime::new(socket_addr).await?;
 
     // udp_runtime_rx reads from the UDP port
     // and sends packets to the receiver channel
@@ -55,41 +54,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         thread::sleep(time::Duration::from_millis(100));
-
     });
 
     // UdpRadio implements the LoRaWAN device Radio trait
     // it sends packets via the sender channel to the UDP runtime
-    let mut radio = UdpRadio::new(sender);
+    let (mut lorawan_receiver, mut radio_runtime, mut lorawan_sender, mut radio) =
+        UdpRadio::new(sender, receiver);
 
+    tokio::spawn(async move {
+        radio_runtime.run().await.unwrap();
+    });
 
-    let mut lorawan: LoRaWanDevice<UdpRadio, udp_radio::Event>= LoRaWanDevice::new(
+    let mut lorawan: LoRaWanDevice<UdpRadio, udp_radio::RadioEvent> = LoRaWanDevice::new(
         [0x55, 0x6C, 0xB6, 0x1E, 0x37, 0xC5, 0x3C, 0x00],
         [0xB9, 0x94, 0x02, 0xD0, 0x7E, 0xD5, 0xB3, 0x70],
         [
-            0xBF, 0x40, 0xD3, 0x0E, 0x4E, 0x23, 0x42, 0x8E, 0xF6, 0x82, 0xCA, 0x77, 0x64, 0xCD, 0xB4, 0x23
+            0xBF, 0x40, 0xD3, 0x0E, 0x4E, 0x23, 0x42, 0x8E, 0xF6, 0x82, 0xCA, 0x77, 0x64, 0xCD,
+            0xB4, 0x23,
         ],
         get_random_u32,
     );
 
-
-    let (mut lorawan_sender, mut lorawan_receiver) = mpsc::channel(100);
-
-    // this translates raw UDP received into a udp_radio event
-    tokio::spawn(async move {
-        loop {
-            if let Some(event) = receiver.recv().await {
-                lorawan_sender.send(udp_radio::Event::RxMsg(event)).await;
-            }
-        }
-    });
-
-
-    // this receives all events and dispatches
     tokio::spawn(async move {
         loop {
             if let Some(event) = lorawan_receiver.recv().await {
-                lorawan.handle_radio_event(&mut radio, event);
+                let response = match event {
+                    udp_radio::Event::Radio(radio_event) => {
+                        lorawan.handle_radio_event(&mut radio, radio_event)
+                    }
+                    udp_radio::Event::LoRaWAN(lorawan_event) => {
+                        lorawan.handle_event(&mut radio, lorawan_event)
+                    }
+                };
             }
         }
     });
