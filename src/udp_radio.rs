@@ -231,6 +231,7 @@ impl Radio for UdpRadio {
                             }
                         }
                     }
+                    semtech_udp::PacketData::PushAck =>  State::TxDone,
                     _ => panic!("Unhandled packet type")
                 }
             }

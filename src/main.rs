@@ -34,34 +34,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let socket_addr = SocketAddr::from(([0, 0, 0, 0], 1685));
 
-    let (mut receiver, mut udp_runtime_rx, sender, mut udp_runtime_tx) =
+    let (receiver, sender, udp_runtime) =
         UdpRuntime::new(socket_addr).await?;
 
-    // udp_runtime_rx reads from the UDP port
-    // and sends packets to the receiver channel
     tokio::spawn(async move {
-        udp_runtime_rx.run().await.unwrap();
-    });
-
-    // udp_runtime_tx writes to the UDP port
-    // by receiving packets from the sender channel
-    tokio::spawn(async move {
-        udp_runtime_tx.run().await.unwrap();
+        udp_runtime.run().await.unwrap();
     });
 
     // this is a workaround so that we can have a global function for random u32
     // it basically maintains 32 random u32's in a vector
     thread::spawn(move || {
-        println!("queue started");
         let mut rng = rand::thread_rng();
         unsafe {
             if let Some(mutex) = &RANDOM {
                 let mut random = mutex.lock().unwrap();
-                println!("pushing");
-
                 while random.len() < 32 {
-                    println!("pushed");
-
                     random.push(rng.gen())
                 }
             }
@@ -92,12 +79,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     thread::sleep(time::Duration::from_millis(1000));
 
-    lorawan_sender.try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin));
+    lorawan_sender.try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin)).unwrap();
 
     //tokio::spawn(async move {
     loop {
         if let Some(event) = lorawan_receiver.recv().await {
-            let response = match event {
+            let _response = match event {
                 udp_radio::Event::Radio(radio_event) => {
                     lorawan.handle_radio_event(&mut radio, radio_event)
                 }
