@@ -212,33 +212,26 @@ impl Radio for UdpRadio {
     fn handle_event(&mut self, event: Self::Event) -> State {
         match event {
             RadioEvent::TxDone => State::TxDone,
-            RadioEvent::UdpRx(udp_rx) => {
-                let len = udp_rx.0.len();
-                let mut buffer = udp_rx.0;
-                if let Ok(packet) = semtech_udp::Packet::parse(buffer.as_mut_slice(), len) {
-                    println!("{:?}", packet);
-                    match packet.data {
-                        semtech_udp::PacketData::PullResp(pull_data) => {
-                            let txpk = pull_data.txpk;
-                            match base64::decode(txpk.data) {
-                                Ok(data) => {
-                                    self.rx_buffer.clear();
-                                    for el in data {
-                                        if let Err(e) = self.rx_buffer.push(el) {
-                                            panic!("Error pushing data into rx_buffer {}", e);
-                                        }
+            RadioEvent::UdpRx(pkt) => {
+                match pkt.data {
+                    semtech_udp::PacketData::PullResp(pull_data) => {
+                        let txpk = pull_data.txpk;
+                        match base64::decode(txpk.data) {
+                            Ok(data) => {
+                                self.rx_buffer.clear();
+                                for el in data {
+                                    if let Err(e) = self.rx_buffer.push(el) {
+                                        panic!("Error pushing data into rx_buffer {}", e);
                                     }
-                                    State::RxDone(RxQuality::new(-115, 4))
                                 }
-                                Err(e) => {
-                                    panic!("Semtech UDP Packet Decoding Error {}", e);
-                                }
+                                State::RxDone(RxQuality::new(-115, 4))
+                            }
+                            Err(e) => {
+                                panic!("Semtech UDP Packet Decoding Error {}", e)
                             }
                         }
-                        _ => panic!("Unhandled packet type"),
                     }
-                } else {
-                    panic!("Semtech UDP Packet Parsing Error");
+                    _ => panic!("Unhandled packet type")
                 }
             }
         }

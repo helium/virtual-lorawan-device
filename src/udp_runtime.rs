@@ -9,7 +9,7 @@ use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
-pub type RxMessage = (Vec<u8>, SocketAddr);
+pub type RxMessage = semtech_udp::Packet;
 pub type TxMessage = semtech_udp::Packet;
 
 pub struct UdpRuntimeRx {
@@ -65,7 +65,10 @@ impl UdpRuntimeRx {
         let mut buf = vec![0u8; 1024];
         loop {
             match self.socket_recv.recv_from(&mut buf).await {
-                Ok((n, sender)) => self.sender.send((buf[..n].to_vec(), sender)).await?,
+                Ok((n, sender)) => {
+                    let packet = semtech_udp::Packet::parse(&mut buf[0..n], n)?;
+                    self.sender.send(packet).await?
+                },
                 Err(e) => return Err(e.into()),
             }
         }
