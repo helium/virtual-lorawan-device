@@ -34,8 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let socket_addr = SocketAddr::from(([0, 0, 0, 0], 1685));
 
-    let (receiver, sender, udp_runtime) =
-        UdpRuntime::new(socket_addr).await?;
+    let (receiver, sender, udp_runtime) = UdpRuntime::new(socket_addr).await?;
 
     tokio::spawn(async move {
         udp_runtime.run().await.unwrap();
@@ -54,9 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             thread::sleep(time::Duration::from_millis(100));
         }
-
     });
-
 
     // UdpRadio implements the LoRaWAN device Radio trait
     // it sends packets via the sender channel to the UDP runtime
@@ -79,7 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     thread::sleep(time::Duration::from_millis(1000));
 
-    lorawan_sender.try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin)).unwrap();
+    lorawan_sender
+        .try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin))
+        .unwrap();
 
     //tokio::spawn(async move {
     loop {

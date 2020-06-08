@@ -3,7 +3,7 @@ use base64;
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use lorawan_device::{radio::*, Event as LorawanEvent, Radio};
-use semtech_udp::{PacketData, PushData, RxPk, gateway_mac};
+use semtech_udp::{gateway_mac, PacketData, PushData, RxPk};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug)]
@@ -150,7 +150,9 @@ impl Radio for UdpRadio {
         });
         let rxpk = Some(packet);
 
-        let foo = [0x12,0x45,0x32,0x42,0x33,0x00,0x00, 0x12,0x23,0x32,0x3,0x3];
+        let foo = [
+            0x12, 0x45, 0x32, 0x42, 0x33, 0x00, 0x00, 0x12, 0x23, 0x32, 0x3, 0x3,
+        ];
 
         let packet = semtech_udp::Packet {
             random_token: 0x00,
@@ -158,7 +160,7 @@ impl Radio for UdpRadio {
             data: PacketData::PushData(PushData { rxpk, stat: None }),
         };
 
-        println!("{:?}",packet);
+        println!("{:?}", packet);
 
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)
@@ -212,29 +214,26 @@ impl Radio for UdpRadio {
     fn handle_event(&mut self, event: Self::Event) -> State {
         match event {
             RadioEvent::TxDone => State::TxDone,
-            RadioEvent::UdpRx(pkt) => {
-                match pkt.data {
-                    semtech_udp::PacketData::PullResp(pull_data) => {
-                        let txpk = pull_data.txpk;
-                        match base64::decode(txpk.data) {
-                            Ok(data) => {
-                                self.rx_buffer.clear();
-                                for el in data {
-                                    if let Err(e) = self.rx_buffer.push(el) {
-                                        panic!("Error pushing data into rx_buffer {}", e);
-                                    }
+            RadioEvent::UdpRx(pkt) => match pkt.data {
+                semtech_udp::PacketData::PullResp(pull_data) => {
+                    let txpk = pull_data.txpk;
+                    match base64::decode(txpk.data) {
+                        Ok(data) => {
+                            self.rx_buffer.clear();
+                            for el in data {
+                                if let Err(e) = self.rx_buffer.push(el) {
+                                    panic!("Error pushing data into rx_buffer {}", e);
                                 }
-                                State::RxDone(RxQuality::new(-115, 4))
                             }
-                            Err(e) => {
-                                panic!("Semtech UDP Packet Decoding Error {}", e)
-                            }
+                            State::RxDone(RxQuality::new(-115, 4))
                         }
+                        Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
                     }
-                    semtech_udp::PacketData::PushAck =>  State::TxDone,
-                    _ => panic!("Unhandled packet type")
                 }
-            }
+                semtech_udp::PacketData::PushAck => State::TxDone,
+                semtech_udp::PacketData::PullAck => State::Busy,
+                _ => panic!("Unhandled packet type: {:?}", pkt.data),
+            },
         }
     }
 }

@@ -29,15 +29,12 @@ pub struct UdpRuntime {
 }
 
 impl UdpRuntime {
-
     fn split(self) -> (UdpRuntimeRx, UdpRuntimeTx, Sender<TxMessage>) {
-        (self.rx,
-         self.tx,
-         self.poll_sender)
+        (self.rx, self.tx, self.poll_sender)
     }
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        let (rx, tx, mut poll_sender)  = self.split();
+        let (rx, tx, mut poll_sender) = self.split();
 
         // udp_runtime_rx reads from the UDP port
         // and sends packets to the receiver channel
@@ -60,7 +57,9 @@ impl UdpRuntime {
             loop {
                 delay_for(Duration::from_millis(100)).await;
 
-                let foo = [0x12,0x45,0x32,0x42,0x33,0x00,0x00, 0x12,0x23,0x32,0x3,0x3];
+                let foo = [
+                    0x12, 0x45, 0x32, 0x42, 0x33, 0x00, 0x00, 0x12, 0x23, 0x32, 0x3, 0x3,
+                ];
 
                 let packet = semtech_udp::Packet {
                     random_token: 0x00,
@@ -71,24 +70,17 @@ impl UdpRuntime {
                 if let Err(e) = poll_sender.send(packet).await {
                     panic!("UdpRuntime error from sending PullData {}", e)
                 }
-
+                println!("Pulling");
             }
         });
 
         Ok(())
-
     }
 
     pub async fn new(
         host: SocketAddr,
-    ) -> Result<
-        (
-            Receiver<RxMessage>,
-            Sender<TxMessage>,
-            UdpRuntime,
-        ),
-        Box<dyn std::error::Error>,
-    > {
+    ) -> Result<(Receiver<RxMessage>, Sender<TxMessage>, UdpRuntime), Box<dyn std::error::Error>>
+    {
         let mut socket = UdpSocket::bind(&host).await?;
         // "connecting" filters for only frames from the server
         socket.connect("127.0.0.1:1680").await?;
@@ -112,18 +104,15 @@ impl UdpRuntime {
                     socket_send,
                 },
                 poll_sender: tx_sender_clone,
-            }
+            },
         ))
     }
 }
 
-
-use tokio::time::delay_for;
 use std::time::Duration;
+use tokio::time::delay_for;
 
 impl UdpRuntimeRx {
-
-
     pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0u8; 1024];
         loop {
@@ -131,7 +120,7 @@ impl UdpRuntimeRx {
                 Ok((n, _)) => {
                     let packet = semtech_udp::Packet::parse(&mut buf[0..n], n)?;
                     self.sender.send(packet).await?
-                },
+                }
                 Err(e) => return Err(e.into()),
             }
         }
