@@ -140,6 +140,11 @@ impl UdpRadio {
             _ => panic!("Unhandled state"),
         }
     }
+
+    pub fn time_until_window_ms(&self) -> isize {
+        let time = self.time.elapsed().as_micros() as isize;
+        (self.window_start as isize - time)/1000
+    }
 }
 
 impl Radio for UdpRadio {
@@ -217,6 +222,7 @@ impl Radio for UdpRadio {
         // but the UDP port is always running concurrently
     }
 
+
     fn handle_event(&mut self, event: Self::Event) -> State {
         match event {
             RadioEvent::TxDone => State::TxDone,
@@ -226,12 +232,7 @@ impl Radio for UdpRadio {
 
                     let time = self.time.elapsed().as_micros() as usize;
                     // packet has arrived after window
-                    if self.window_start < time  {
-                        println!("Timeout = {} us,  Time = {} us", self.window_close , time);
-                        panic!("Timeout - Time = {} ms", (self.window_start  as isize - time as isize)/1000);
-                    } else {
-                        println!("{} ms to spare before RX window start", (self.window_start  as isize - time as isize)/1000);
-                    }
+                    let time_til_window = self.time_until_window_ms();
 
                     let txpk = pull_data.txpk;
                     match base64::decode(txpk.data) {

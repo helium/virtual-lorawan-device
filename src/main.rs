@@ -129,11 +129,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 match response.state() {
                     LoRaWanState::JoinedIdle => {
-                        println!("Waiting 10 seconds");
-                        delay_for(Duration::from_millis(10000)).await;
+                        let time_til_window = radio.time_until_window_ms();
+                        if time_til_window > 0 {
+                            println!("Waiting for window: {} ms (time to spare)", time_til_window);
+                            delay_for(Duration::from_millis(time_til_window as u64)).await;
+                        } else {
+                            println!("Warning! UDP packet received after first window by {} ms", time_til_window);
+                        }
+                        let additional_delay = 10000;
+                        println!("Additional delay: {} ms", additional_delay);
+                        delay_for(Duration::from_millis(additional_delay)).await;
                         let data = [1,2,3,4];
                         println!("Sending DataUp");
-                        lorawan.send(&mut radio, &data, 1, false );
+                        lorawan.send(&mut radio, &data, 1, true );
                         // the delay gives the random number generator get started
                     }
                     _ => (),

@@ -290,6 +290,7 @@ dependencies = [
 name = "lorawan-device"
 version = "0.1.0"
 dependencies = [
+ "as-slice",
  "generic-array 0.13.2",
  "heapless",
  "lorawan-encoding",
