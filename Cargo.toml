@@ -9,7 +9,7 @@ version = "0.2.21"
 features = ["full"]
 
 [dependencies]
-semtech-udp = { path = "../semtech-udp" }
+semtech-udp = { git = "https://github.com/lthiery/semtech-udp", branch = "lthiery/usability" }
 lorawan-device = { path = "../rust-lorawan/device" }
 rand = "0.7.3"
 heapless = "0.5.4"

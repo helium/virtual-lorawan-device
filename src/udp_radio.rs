@@ -2,7 +2,7 @@ use super::udp_runtime;
 use base64;
 use heapless::consts::*;
 use heapless::Vec as HVec;
-use lorawan_device::{radio::*, Event as LorawanEvent, Radio};
+use lorawan_device::{radio::*, Event as LorawanEvent, State as LorawanState, Radio};
 use semtech_udp::{gateway_mac, PacketData, PushData, RxPk};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
@@ -89,11 +89,16 @@ impl UdpRadioRuntime {
     }
 }
 
+use std::time::{Duration, Instant};
+
 pub struct UdpRadio {
     sender: Sender<udp_runtime::TxMessage>,
     lorawan_sender: Sender<Event>,
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
+    time: Instant,
+    window_start: usize,
+    window_close: usize,
 }
 
 impl UdpRadio {
@@ -117,8 +122,23 @@ impl UdpRadio {
                 lorawan_sender: lorawan_sender_clone,
                 rx_buffer: HVec::new(),
                 settings: Settings::default(),
+                time: Instant::now(),
+                window_start: 0,
+                window_close: 0,
             },
         )
+    }
+
+    pub fn timer_request(&mut self, state: LorawanState, delay: usize){
+        match state {
+            LorawanState::WaitingForWindow => {
+                self.window_start = self.time.elapsed().as_micros() as usize + delay*1000;
+            }
+            LorawanState::InWindow => {
+                self.window_close = self.window_start + delay;
+            }
+            _ => panic!("Unhandled state"),
+        }
     }
 }
 
@@ -128,6 +148,7 @@ impl Radio for UdpRadio {
     fn send(&mut self, buffer: &mut [u8]) {
         let size = buffer.len() as u64;
         let data = base64::encode(buffer);
+        let tmst = self.time.elapsed().as_micros() as u64;
 
         let mut packet = Vec::new();
         packet.push({
@@ -143,7 +164,7 @@ impl Radio for UdpRadio {
                 rssi: -112,
                 size,
                 stat: 1,
-                tmst: 320000,
+                tmst,
             }
         });
         let rxpk = Some(packet);
@@ -155,15 +176,10 @@ impl Radio for UdpRadio {
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)
         }
-
-        // sending the packet pack to "ourselves" simulates a SX12xx DI0 interrupt
-        // if let Err(e) = self
-        //     .lorawan_sender
-        //     .try_send(Event::Radio(RadioEvent::TxDone))
-        // {
-        //     panic!("LoRaWAN Queue Overflow! {}", e)
-        // }
     }
+
+    fn get_rx_window_offset_ms(&mut self) -> isize { 0 }
+    fn get_rx_window_duration_ms(&mut self) -> usize { 1000 }
 
     fn set_frequency(&mut self, frequency_mhz: u32) {
         self.settings.freq = frequency_mhz;
@@ -206,6 +222,17 @@ impl Radio for UdpRadio {
             RadioEvent::TxDone => State::TxDone,
             RadioEvent::UdpRx(pkt) => match pkt.data {
                 semtech_udp::PacketData::PullResp(pull_data) => {
+
+
+                    let time = self.time.elapsed().as_micros() as usize;
+                    // packet has arrived after window
+                    if self.window_start < time  {
+                        println!("Timeout = {} us,  Time = {} us", self.window_close , time);
+                        panic!("Timeout - Time = {} ms", (self.window_start  as isize - time as isize)/1000);
+                    } else {
+                        println!("{} ms to spare before RX window start", (self.window_start  as isize - time as isize)/1000);
+                    }
+
                     let txpk = pull_data.txpk;
                     match base64::decode(txpk.data) {
                         Ok(data) => {
