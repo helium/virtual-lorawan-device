@@ -85,6 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_random_u32,
     );
 
+    println!("Starting Join");
     lorawan_sender
         .try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin))
         .unwrap();

@@ -97,7 +97,8 @@ pub struct UdpRadio {
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
     time: Instant,
-    timeout: usize,
+    window_start: usize,
+    window_close: usize,
 }
 
 impl UdpRadio {
@@ -122,7 +123,8 @@ impl UdpRadio {
                 rx_buffer: HVec::new(),
                 settings: Settings::default(),
                 time: Instant::now(),
-                timeout: 0
+                window_start: 0,
+                window_close: 0,
             },
         )
     }
@@ -130,10 +132,10 @@ impl UdpRadio {
     pub fn timer_request(&mut self, state: LorawanState, delay: usize){
         match state {
             LorawanState::WaitingForWindow => {
-                self.timeout = self.time.elapsed().as_micros() as usize + delay*1000;
+                self.window_start = self.time.elapsed().as_micros() as usize + delay*1000;
             }
             LorawanState::InWindow => {
-                self.timeout += delay;
+                self.window_close = self.window_start + delay;
             }
             _ => panic!("Unhandled state"),
         }
@@ -223,13 +225,12 @@ impl Radio for UdpRadio {
 
 
                     let time = self.time.elapsed().as_micros() as usize;
-                    // check timeliness
-                    if self.timeout <  time  {
-                        println!("Timeout = {} us,  Time = {} us", self.timeout, time);
-                        panic!("Timeout - Time = {} ms", (self.timeout as isize - time as isize)/1000);
+                    // packet has arrived after window
+                    if self.window_start < time  {
+                        println!("Timeout = {} us,  Time = {} us", self.window_close , time);
+                        panic!("Timeout - Time = {} ms", (self.window_start  as isize - time as isize)/1000);
                     } else {
-                        //println!("Timeout = {} us,  Time = {} us", self.timeout, time);
-                        //println!("Timeout - Time = {} ms ", (self.timeout as isize - time as isize)/1000);
+                        println!("{} ms to spare before RX window start", (self.window_start  as isize - time as isize)/1000);
                     }
 
                     let txpk = pull_data.txpk;

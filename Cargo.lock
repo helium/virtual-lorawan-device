@@ -519,6 +519,7 @@ checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
 [[package]]
 name = "semtech-udp"
 version = "0.1.0"
+source = "git+https://github.com/lthiery/semtech-udp?branch=lthiery/usability#1dc31a8b437be47dc811970448d0ff2e611aa145"
 dependencies = [
  "arrayref",
  "num_enum",
