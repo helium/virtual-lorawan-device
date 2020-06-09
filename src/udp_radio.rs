@@ -126,12 +126,10 @@ impl Radio for UdpRadio {
     type Event = RadioEvent;
 
     fn send(&mut self, buffer: &mut [u8]) {
-        println!("Sending!");
         let size = buffer.len() as u64;
         let data = base64::encode(buffer);
 
         let mut packet = Vec::new();
-        println!("{} {}", self.settings.get_codr(), self.settings.get_datr());
         packet.push({
             RxPk {
                 chan: 0,
@@ -150,29 +148,21 @@ impl Radio for UdpRadio {
         });
         let rxpk = Some(packet);
 
-        let foo = [
-            0x12, 0x45, 0x32, 0x42, 0x33, 0x00, 0x00, 0x12, 0x23, 0x32, 0x3, 0x3,
-        ];
-
-        let packet = semtech_udp::Packet {
-            random_token: 0x00,
-            gateway_mac: Some(gateway_mac(&foo)),
-            data: PacketData::PushData(PushData { rxpk, stat: None }),
-        };
-
-        println!("{:?}", packet);
+        let packet = semtech_udp::Packet::from_data(
+            PacketData::PushData(PushData { rxpk, stat: None })
+        );
 
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)
         }
 
         // sending the packet pack to "ourselves" simulates a SX12xx DI0 interrupt
-        if let Err(e) = self
-            .lorawan_sender
-            .try_send(Event::Radio(RadioEvent::TxDone))
-        {
-            panic!("LoRaWAN Queue Overflow! {}", e)
-        }
+        // if let Err(e) = self
+        //     .lorawan_sender
+        //     .try_send(Event::Radio(RadioEvent::TxDone))
+        // {
+        //     panic!("LoRaWAN Queue Overflow! {}", e)
+        // }
     }
 
     fn set_frequency(&mut self, frequency_mhz: u32) {

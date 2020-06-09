@@ -55,36 +55,30 @@ impl UdpRuntime {
         // spawn a timer for telling tx to send a PullReq frame
         tokio::spawn(async move {
             loop {
-                delay_for(Duration::from_millis(100)).await;
 
-                let foo = [
-                    0x12, 0x45, 0x32, 0x42, 0x33, 0x00, 0x00, 0x12, 0x23, 0x32, 0x3, 0x3,
-                ];
-
-                let packet = semtech_udp::Packet {
-                    random_token: 0x00,
-                    gateway_mac: Some(semtech_udp::gateway_mac(&foo)),
-                    data: semtech_udp::PacketData::PullData,
-                };
+                let packet = semtech_udp::Packet::from_data(
+                    semtech_udp::PacketData::PullData
+                );
 
                 if let Err(e) = poll_sender.send(packet).await {
                     panic!("UdpRuntime error from sending PullData {}", e)
                 }
-                println!("Pulling");
-            }
+                delay_for(Duration::from_millis(10000)).await;
+
+           }
         });
 
         Ok(())
     }
 
     pub async fn new(
+        local: SocketAddr,
         host: SocketAddr,
     ) -> Result<(Receiver<RxMessage>, Sender<TxMessage>, UdpRuntime), Box<dyn std::error::Error>>
     {
-        let mut socket = UdpSocket::bind(&host).await?;
+        let mut socket = UdpSocket::bind(&local).await?;
         // "connecting" filters for only frames from the server
-        socket.connect("127.0.0.1:1680").await?;
-        // send something so that server can know about us
+        socket.connect(host).await?;
         socket.send(&[0]).await?;
         let (rx_sender, rx_receiver) = mpsc::channel(100);
         let (tx_sender, tx_receiver) = mpsc::channel(100);
@@ -111,13 +105,14 @@ impl UdpRuntime {
 
 use std::time::Duration;
 use tokio::time::delay_for;
+use rand::Rng;
 
 impl UdpRuntimeRx {
     pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0u8; 1024];
         loop {
-            match self.socket_recv.recv_from(&mut buf).await {
-                Ok((n, _)) => {
+            match self.socket_recv.recv(&mut buf).await {
+                Ok(n) => {
                     let packet = semtech_udp::Packet::parse(&mut buf[0..n], n)?;
                     self.sender.send(packet).await?
                 }
@@ -127,15 +122,22 @@ impl UdpRuntimeRx {
     }
 }
 
+
+
 impl UdpRuntimeTx {
     pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0u8; 1024];
+        let mac: [u8; 8] = [
+            170, 85, 90, 0, 0, 0, 0, 5
+        ];
         loop {
             let tx = self.receiver.recv().await;
-            if let Some(data) = tx {
+            if let Some(mut data) = tx {
+                data.set_gateway_mac(&mac);
+                data.set_token(super::get_random_u32() as u16);
                 let n = data.serialize(&mut buf)? as usize;
-                self.socket_send.send(&buf[..n]).await?;
-                buf.clear();
+                let sent = self.socket_send.send(&buf[..n]).await?;
+                delay_for(Duration::from_millis(1000)).await;
             }
         }
     }

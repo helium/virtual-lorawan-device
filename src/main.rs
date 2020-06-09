@@ -2,12 +2,16 @@ use std::net::SocketAddr;
 mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
-use lorawan_device::{Device as LoRaWanDevice, Event as LoRaWanEvent};
+use lorawan_device::{
+    Device as LoRaWanDevice, Event as LoRaWanEvent, Request as LoRaWanRequest,
+    Response as LoRaWanResponse, State as LoRaWanState,
+};
 use rand::Rng;
 use std::sync::Mutex;
 use std::{thread, time};
 use udp_radio::UdpRadio;
-
+use std::time::Duration;
+use tokio::time::delay_for;
 static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
 
 // this is a workaround so that we can have a global function for random u32
@@ -32,13 +36,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe {
         RANDOM = Some(Mutex::new(Vec::new()));
     }
-    let socket_addr = SocketAddr::from(([0, 0, 0, 0], 1685));
-
-    let (receiver, sender, udp_runtime) = UdpRuntime::new(socket_addr).await?;
-
-    tokio::spawn(async move {
-        udp_runtime.run().await.unwrap();
-    });
 
     // this is a workaround so that we can have a global function for random u32
     // it basically maintains 32 random u32's in a vector
@@ -53,6 +50,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             thread::sleep(time::Duration::from_millis(100));
         }
+    });
+    delay_for(Duration::from_millis(500)).await;
+
+    let my_address = SocketAddr::from(([0, 0, 0, 0], 1685));
+    let host = SocketAddr::from(([127, 0, 0, 1], 1680));
+
+    let (receiver, sender, udp_runtime) = UdpRuntime::new(my_address, host).await?;
+
+    tokio::spawn(async move {
+        udp_runtime.run().await.unwrap();
     });
 
     // UdpRadio implements the LoRaWAN device Radio trait
@@ -74,7 +81,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_random_u32,
     );
 
-    thread::sleep(time::Duration::from_millis(1000));
 
     lorawan_sender
         .try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin))
@@ -83,7 +89,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //tokio::spawn(async move {
     loop {
         if let Some(event) = lorawan_receiver.recv().await {
-            let _response = match event {
+            println!("Event: {:?}", event);
+            let response = match event {
                 udp_radio::Event::Radio(radio_event) => {
                     lorawan.handle_radio_event(&mut radio, radio_event)
                 }
@@ -91,9 +98,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     lorawan.handle_event(&mut radio, lorawan_event)
                 }
             };
+
+            if let Some(response) = response {
+                if let Some(request) = response.request() {
+                    match request {
+                        LoRaWanRequest::TimerRequest(_delay) => {
+                            // for now we immediately fire timer
+                            lorawan_sender
+                                .send(udp_radio::Event::LoRaWAN(LoRaWanEvent::TimerFired))
+                                .await?;
+                        }
+                        LoRaWanRequest::Error => {
+                            panic!("LoRawAN Device Stack threw Error!");
+                        }
+                    }
+
+                }
+
+                match response.state() {
+                    LoRaWanState::JoinedIdle => {
+                        println!("Join");
+                        let data = [1,2,3,4];
+                        lorawan.send(&mut radio, &data, 1, false );
+                    }
+                    _ => (),
+                }
+
+            }
         }
     }
-    //});
-
-    //loop {}
 }
