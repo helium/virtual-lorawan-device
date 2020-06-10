@@ -18,6 +18,7 @@ pub enum RadioEvent {
 pub enum Event {
     Radio(RadioEvent),
     LoRaWAN(LorawanEvent),
+    Shutdown,
 }
 
 struct Settings {
