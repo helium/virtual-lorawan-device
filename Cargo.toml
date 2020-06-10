@@ -8,6 +8,14 @@ edition = "2018"
 version = "0.2.21"
 features = ["full"]
 
+[dependencies.hyper]
+default-features = false
+features = ["tcp"]
+version = "=0.13.6"
+
+[dependencies.hyper-tls]
+version = "0.4.1"
+
 [dependencies]
 semtech-udp = { git = "https://github.com/lthiery/semtech-udp", rev = "6a5470287fa2704f75b90c5fbbbbbc47b11172e7" }
 #lorawan-device = { git = "https://github.com/helium/rust-lorawan", rev = "96206490" }
@@ -20,6 +28,9 @@ serde =  "1"
 serde_derive = "1"
 serde_json = "1"
 hex = "0.4"
+bytes = "0.4.12"
+
+
 
 [profile.dev]
 opt-level = "s"
