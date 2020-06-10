@@ -18,14 +18,14 @@ use udp_radio::UdpRadio;
 const DEVICES_PATH: &str = "lorawan-devices.json";
 mod config;
 #[derive(Debug, StructOpt)]
-#[structopt(name = "lorawan-sniffer", about = "lorawan sniffing utility")]
+#[structopt(name = "virtual-lorawan-device", about = "lorawan sniffing utility")]
 struct Opt {
     /// IP address and port of miner mirror port
     /// (eg: 192.168.1.30:1681)
     #[structopt(short, long, default_value = "127.0.0.1:1680")]
     host: String,
 
-    /// Path to devices
+    /// Path to JSON devices file
     #[structopt(short, long, default_value = DEVICES_PATH)]
     console: String,
 }
@@ -171,7 +171,7 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                     } else {
                         println!(
                             "Warning! UDP packet received after first window by {} ms",
-                            time_til_window
+                            -time_til_window
                         );
                     }
 

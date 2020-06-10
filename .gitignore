@@ -1,2 +1,4 @@
 /target
 /.idea
+lorawan-devices.json
+virtual-device-config.toml

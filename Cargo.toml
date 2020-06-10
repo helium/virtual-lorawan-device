@@ -10,7 +10,8 @@ features = ["full"]
 
 [dependencies]
 semtech-udp = { git = "https://github.com/lthiery/semtech-udp", rev = "6a5470287fa2704f75b90c5fbbbbbc47b11172e7" }
-lorawan-device = { git = "https://github.com/helium/rust-lorawan", rev = "96206490" }
+#lorawan-device = { git = "https://github.com/helium/rust-lorawan", rev = "96206490" }
+lorawan-device = { path = "../rust-lorawan/device" }
 rand = "0.7.3"
 heapless = "0.5.4"
 base64 = "*"
