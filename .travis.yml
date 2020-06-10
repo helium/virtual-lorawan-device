@@ -1,0 +1,68 @@
+language: rust
+sudo: required
+services: docker
+cache: cargo
+
+before_cache:
+  - rm -rf "$TRAVIS_HOME/.cargo/registry/src"
+
+DEPLOY_TO_GITHUB: &DEPLOY_TO_GITHUB
+  before_deploy:
+    - git config --local user.name "Helium CI"
+    - git config --local user.email "hello@helium.com"
+    - name="virtual-lorawan-device-$TRAVIS_TAG-$TARGET"
+    - mkdir $name
+    - cp target/$TARGET/release/virtual-lorawan-device$EXE $name/
+    - cp LICENSE $name/
+    - cp README.md $name/
+    - zip -r $name.zip $name
+  deploy:
+    provider: releases
+    api_key: $GITHUB_TOKEN
+    file: virtual-lorawan-device-$TRAVIS_TAG-$TARGET.zip
+    skip_cleanup: true
+    on:
+      branch: master
+      tags: true
+
+matrix:
+  include:
+  - name: Linux Binary
+    env: TARGET=x86_64-unknown-linux-gnu
+    rust: stable
+    before_script:
+      - rustup target add $TARGET
+      - rustup component add rustfmt
+      - rustup component add clippy
+    script:
+      - cargo fmt -- --check
+      - cargo build --release --target $TARGET --locked
+      - cargo clippy -- --deny=clippy::all
+    <<: *DEPLOY_TO_GITHUB
+
+  - name: macOS Binary
+    env: MACOSX_DEPLOYMENT_TARGET=10.7 TARGET=x86_64-apple-darwin
+    os: osx
+    rust: stable
+    before_script:
+      - rustup target add $TARGET
+      - rustup component add rustfmt
+      - rustup component add clippy
+    script:
+      - cargo fmt -- --check
+      - cargo build --release --target $TARGET --locked
+      - cargo clippy -- --deny=clippy::all
+    <<: *DEPLOY_TO_GITHUB
+
+  - name: Windows Binary
+    env: TARGET=x86_64-pc-windows-gnu EXE=.exe
+    rust: stable
+    before_script:
+      - rustup target add $TARGET
+      - rustup component add rustfmt
+      - rustup component add clippy
+    script:
+      - cargo fmt -- --check
+      - RUSTFLAGS="-C linker=x86_64-w64-mingw32-gcc" cargo build --release --target $TARGET --locked
+      - cargo clippy -- --deny=clippy::all
+    <<: *DEPLOY_TO_GITHUB

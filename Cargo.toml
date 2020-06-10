@@ -1,5 +1,5 @@
 [package]
-name = "virtual-lorawan"
+name = "virtual-lorawan-device"
 version = "0.1.0"
 authors = ["lthiery <louis@helium.com>"]
 edition = "2018"
@@ -9,8 +9,22 @@ version = "0.2.21"
 features = ["full"]
 
 [dependencies]
-semtech-udp = { git = "https://github.com/lthiery/semtech-udp", branch = "lthiery/usability" }
-lorawan-device = { path = "../rust-lorawan/device" }
+semtech-udp = { git = "https://github.com/lthiery/semtech-udp", rev = "6a5470287fa2704f75b90c5fbbbbbc47b11172e7" }
+lorawan-device = { git = "https://github.com/helium/rust-lorawan", rev = "96206490" }
 rand = "0.7.3"
 heapless = "0.5.4"
 base64 = "*"
+structopt = { version = "0.3.2", default-features = false }
+serde =  "1"
+serde_derive = "1"
+serde_json = "1"
+hex = "0.4"
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+debug = true
+codegen-units = 1
+lto           = true
+opt-level     = "s"

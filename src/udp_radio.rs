@@ -1,18 +1,20 @@
 use super::udp_runtime;
-use base64;
 use heapless::consts::*;
 use heapless::Vec as HVec;
-use lorawan_device::{radio::*, Event as LorawanEvent, State as LorawanState, Radio};
-use semtech_udp::{gateway_mac, PacketData, PushData, RxPk};
+use lorawan_device::{radio::*, Event as LorawanEvent, Radio, State as LorawanState};
+use semtech_udp::{PacketData, PushData, RxPk};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug)]
+#[allow(dead_code)]
+#[allow(clippy::large_enum_variant)]
 pub enum RadioEvent {
     UdpRx(udp_runtime::RxMessage),
     TxDone,
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     Radio(RadioEvent),
     LoRaWAN(LorawanEvent),
@@ -66,7 +68,7 @@ impl Default for Settings {
             bw: Bandwidth::_125KHZ,
             sf: SpreadingFactor::_10,
             cr: CodingRate::_4_5,
-            freq: 902300000,
+            freq: 902_300_000,
         }
     }
 }
@@ -89,11 +91,10 @@ impl UdpRadioRuntime {
     }
 }
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 pub struct UdpRadio {
     sender: Sender<udp_runtime::TxMessage>,
-    lorawan_sender: Sender<Event>,
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
     time: Instant,
@@ -107,7 +108,6 @@ impl UdpRadio {
         receiver: Receiver<udp_runtime::RxMessage>,
     ) -> (Receiver<Event>, UdpRadioRuntime, Sender<Event>, UdpRadio) {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
-        let lorawan_sender_clone = lorawan_sender.clone();
         let lorawan_sender_another_clone = lorawan_sender.clone();
 
         (
@@ -119,7 +119,6 @@ impl UdpRadio {
             lorawan_sender_another_clone,
             UdpRadio {
                 sender,
-                lorawan_sender: lorawan_sender_clone,
                 rx_buffer: HVec::new(),
                 settings: Settings::default(),
                 time: Instant::now(),
@@ -129,10 +128,10 @@ impl UdpRadio {
         )
     }
 
-    pub fn timer_request(&mut self, state: LorawanState, delay: usize){
+    pub fn timer_request(&mut self, state: LorawanState, delay: usize) {
         match state {
             LorawanState::WaitingForWindow => {
-                self.window_start = self.time.elapsed().as_micros() as usize + delay*1000;
+                self.window_start = self.time.elapsed().as_micros() as usize + delay * 1000;
             }
             LorawanState::InWindow => {
                 self.window_close = self.window_start + delay;
@@ -143,7 +142,7 @@ impl UdpRadio {
 
     pub fn time_until_window_ms(&self) -> isize {
         let time = self.time.elapsed().as_micros() as isize;
-        (self.window_start as isize - time)/1000
+        (self.window_start as isize - time) / 1000
     }
 }
 
@@ -174,17 +173,20 @@ impl Radio for UdpRadio {
         });
         let rxpk = Some(packet);
 
-        let packet = semtech_udp::Packet::from_data(
-            PacketData::PushData(PushData { rxpk, stat: None })
-        );
+        let packet =
+            semtech_udp::Packet::from_data(PacketData::PushData(PushData { rxpk, stat: None }));
 
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)
         }
     }
 
-    fn get_rx_window_offset_ms(&mut self) -> isize { 0 }
-    fn get_rx_window_duration_ms(&mut self) -> usize { 1000 }
+    fn get_rx_window_offset_ms(&mut self) -> isize {
+        0
+    }
+    fn get_rx_window_duration_ms(&mut self) -> usize {
+        1000
+    }
 
     fn set_frequency(&mut self, frequency_mhz: u32) {
         self.settings.freq = frequency_mhz;
@@ -222,18 +224,11 @@ impl Radio for UdpRadio {
         // but the UDP port is always running concurrently
     }
 
-
     fn handle_event(&mut self, event: Self::Event) -> State {
         match event {
             RadioEvent::TxDone => State::TxDone,
             RadioEvent::UdpRx(pkt) => match pkt.data {
                 semtech_udp::PacketData::PullResp(pull_data) => {
-
-
-                    let time = self.time.elapsed().as_micros() as usize;
-                    // packet has arrived after window
-                    let time_til_window = self.time_until_window_ms();
-
                     let txpk = pull_data.txpk;
                     match base64::decode(txpk.data) {
                         Ok(data) => {

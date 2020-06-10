@@ -4,14 +4,32 @@ use udp_runtime::UdpRuntime;
 mod udp_radio;
 use lorawan_device::{
     Device as LoRaWanDevice, Event as LoRaWanEvent, Request as LoRaWanRequest,
-    Response as LoRaWanResponse, State as LoRaWanState,
+    State as LoRaWanState,
 };
 use rand::Rng;
+use std::process;
 use std::sync::Mutex;
-use std::{thread, time};
-use udp_radio::UdpRadio;
 use std::time::Duration;
+use std::{thread, time};
+use structopt::StructOpt;
 use tokio::time::delay_for;
+use udp_radio::UdpRadio;
+
+const DEVICES_PATH: &str = "lorawan-devices.json";
+mod config;
+#[derive(Debug, StructOpt)]
+#[structopt(name = "lorawan-sniffer", about = "lorawan sniffing utility")]
+struct Opt {
+    /// IP address and port of miner mirror port
+    /// (eg: 192.168.1.30:1681)
+    #[structopt(short, long, default_value = "127.0.0.1:1680")]
+    host: String,
+
+    /// Path to devices
+    #[structopt(short, long, default_value = DEVICES_PATH)]
+    console: String,
+}
+
 static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
 
 // this is a workaround so that we can have a global function for random u32
@@ -33,6 +51,24 @@ fn get_random_u32() -> u32 {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Opt::from_args();
+    if let Err(e) = run(cli).await {
+        println!("error: {}", e);
+        process::exit(1);
+    }
+    Ok(())
+}
+use std::str::FromStr;
+async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
+    let device = if let Some(devices) = config::load_devices(DEVICES_PATH)? {
+        devices[0].clone()
+    } else {
+        panic!("No devices defined!")
+    };
+
+    println!("Virtual device utility only supports one device for now");
+    println!("{:#?}", device);
+
     unsafe {
         RANDOM = Some(Mutex::new(Vec::new()));
     }
@@ -52,13 +88,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 thread::sleep(time::Duration::from_millis(100));
             }
         }
-
     });
     // the delay gives the random number generator get started
     delay_for(Duration::from_millis(50)).await;
 
     let my_address = SocketAddr::from(([0, 0, 0, 0], 1685));
-    let host = SocketAddr::from(([127, 0, 0, 1], 1680));
+    //let  = opt.host.parse()?;
+    let host = SocketAddr::from_str(opt.host.as_str())?;
 
     let (receiver, sender, udp_runtime) = UdpRuntime::new(my_address, host).await?;
 
@@ -76,16 +112,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let mut lorawan: LoRaWanDevice<UdpRadio, udp_radio::RadioEvent> = LoRaWanDevice::new(
-        [0x55, 0x6C, 0xB6, 0x1E, 0x37, 0xC5, 0x3C, 0x00],
-        [0xB9, 0x94, 0x02, 0xD0, 0x7E, 0xD5, 0xB3, 0x70],
-        [
-            0xBF, 0x40, 0xD3, 0x0E, 0x4E, 0x23, 0x42, 0x8E, 0xF6, 0x82, 0xCA, 0x77, 0x64, 0xCD,
-            0xB4, 0x23,
-        ],
+        device.credentials().deveui_cloned_into_buf()?,
+        device.credentials().appeui_cloned_into_buf()?,
+        device.credentials().appkey_cloned_into_buf()?,
         get_random_u32,
     );
 
     println!("Starting Join");
+
+    let mut joined = false;
     lorawan_sender
         .try_send(udp_radio::Event::LoRaWAN(LoRaWanEvent::StartJoin))
         .unwrap();
@@ -112,41 +147,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     lorawan_sender
                                         .send(udp_radio::Event::LoRaWAN(LoRaWanEvent::TimerFired))
                                         .await?;
-                                },
+                                }
                                 LoRaWanState::InWindow => {
                                     // never timeout
-                                },
-                                _ => panic!("Shouldn't be here")
+                                }
+                                _ => panic!("Shouldn't be here"),
                             }
-
                         }
                         LoRaWanRequest::Error => {
                             panic!("LoRawAN Device Stack threw Error!");
                         }
                     }
-
                 }
 
-                match response.state() {
-                    LoRaWanState::JoinedIdle => {
-                        let time_til_window = radio.time_until_window_ms();
-                        if time_til_window > 0 {
-                            println!("Waiting for window: {} ms (time to spare)", time_til_window);
-                            delay_for(Duration::from_millis(time_til_window as u64)).await;
-                        } else {
-                            println!("Warning! UDP packet received after first window by {} ms", time_til_window);
-                        }
-                        let additional_delay = 10000;
-                        println!("Additional delay: {} ms", additional_delay);
-                        delay_for(Duration::from_millis(additional_delay)).await;
-                        let data = [1,2,3,4];
-                        println!("Sending DataUp");
-                        lorawan.send(&mut radio, &data, 1, true );
-                        // the delay gives the random number generator get started
+                if let LoRaWanState::JoinedIdle = response.state() {
+                    let time_til_window = radio.time_until_window_ms();
+                    if time_til_window > 0 {
+                        println!(
+                            "Packet received, but waiting for window: {} ms (time to spare)",
+                            time_til_window
+                        );
+                        delay_for(Duration::from_millis(time_til_window as u64)).await;
+                    } else {
+                        println!(
+                            "Warning! UDP packet received after first window by {} ms",
+                            time_til_window
+                        );
                     }
-                    _ => (),
-                }
 
+                    if !joined {
+                        println!("Join Success!");
+                        joined = true;
+                    }
+
+                    let additional_delay = device.transmit_delay();
+                    println!("Additional delay: {} ms", additional_delay);
+                    delay_for(Duration::from_millis(additional_delay)).await;
+                    let data = [1, 2, 3, 4];
+                    println!("Sending DataUp");
+                    lorawan.send(&mut radio, &data, 1, true);
+                    // the delay gives the random number generator get started
+                }
             }
         }
     }

@@ -3,7 +3,6 @@
    run sending and receiving concurrently as tasks,
    receive downlink packets and send uplink packets easily
 */
-use semtech_udp;
 use std::net::SocketAddr;
 use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
@@ -55,17 +54,13 @@ impl UdpRuntime {
         // spawn a timer for telling tx to send a PullReq frame
         tokio::spawn(async move {
             loop {
-
-                let packet = semtech_udp::Packet::from_data(
-                    semtech_udp::PacketData::PullData
-                );
+                let packet = semtech_udp::Packet::from_data(semtech_udp::PacketData::PullData);
 
                 if let Err(e) = poll_sender.send(packet).await {
                     panic!("UdpRuntime error from sending PullData {}", e)
                 }
                 delay_for(Duration::from_millis(10000)).await;
-
-           }
+            }
         });
 
         Ok(())
@@ -105,7 +100,6 @@ impl UdpRuntime {
 
 use std::time::Duration;
 use tokio::time::delay_for;
-use rand::Rng;
 
 impl UdpRuntimeRx {
     pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -113,7 +107,7 @@ impl UdpRuntimeRx {
         loop {
             match self.socket_recv.recv(&mut buf).await {
                 Ok(n) => {
-                    let packet = semtech_udp::Packet::parse(&mut buf[0..n], n)?;
+                    let packet = semtech_udp::Packet::parse(&buf[0..n], n)?;
                     self.sender.send(packet).await?
                 }
                 Err(e) => return Err(e.into()),
@@ -122,21 +116,17 @@ impl UdpRuntimeRx {
     }
 }
 
-
-
 impl UdpRuntimeTx {
     pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut buf = vec![0u8; 1024];
-        let mac: [u8; 8] = [
-            170, 85, 90, 0, 0, 0, 0, 5
-        ];
+        let mac: [u8; 8] = [170, 85, 90, 0, 0, 0, 0, 5];
         loop {
             let tx = self.receiver.recv().await;
             if let Some(mut data) = tx {
                 data.set_gateway_mac(&mac);
                 data.set_token(super::get_random_u32() as u16);
                 let n = data.serialize(&mut buf)? as usize;
-                let sent = self.socket_send.send(&buf[..n]).await?;
+                let _sent = self.socket_send.send(&buf[..n]).await?;
                 delay_for(Duration::from_millis(1000)).await;
             }
         }
