@@ -228,19 +228,14 @@ pub async fn fetch_open_channel(
 
     assert!(still_open.len()<=2);
 
-    // if still_open.len() == 2 {
-    //     let open = ;
-    //     let pending = still_open.pop().unwrap();
-    //     open
-    // }
-    // // we've assumed that only two are remaining after matching with closed transactions
-    // assert_eq!(, 2);
-    //
-    //
-    //
-    // // we've assumed that they're ordered in a way so we can pop to get open and pending
-    // // if we're wrong, the open one won't be 1 nonce less than the pending one
-    // assert_eq!(open.nonce + 1, pending.nonce);
-
-    Ok(still_open.pop().unwrap())
+    Ok(if still_open.len() == 2 {
+        let open = still_open.pop().unwrap();
+        let pending = still_open.pop().unwrap();
+        // we've assumed that they're ordered in a way so we can pop to get open and pending
+        // if we're wrong, the open one won't be 1 nonce less than the pending one
+        assert_eq!(open.nonce + 1, pending.nonce);
+        open
+    } else {
+        still_open.pop().unwrap()
+    })
 }

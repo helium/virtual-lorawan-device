@@ -126,9 +126,8 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         );
 
         let open = fetch_open_channel().await?;
-
-        println!("Open remaining {}", open.remaining_blocks().await?.1);
         println!("{:#?}", open);
+        println!("Expires in {}", open.remaining_blocks().await?.1);
 
         let sender_clone = lorawan_sender.clone();
         let threshold = open.close_height() as isize - 3;
@@ -187,16 +186,16 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                     if let LoRaWanState::JoinedIdle = response.state() {
                         let time_til_window = radio.time_until_window_ms();
                         if time_til_window > 0 {
-                            // println!(
-                            //     "Packet received, but waiting for window: {} ms (time to spare)",
-                            //     time_til_window
-                            // );
+                            println!(
+                                "Packet received, but waiting for window: {} ms (time to spare)",
+                                time_til_window
+                            );
                             delay_for(Duration::from_millis(time_til_window as u64)).await;
                         } else {
-                            // println!(
-                            //     "Warning! UDP packet received after first window by {} ms",
-                            //     -time_til_window
-                            // );
+                            println!(
+                                "Warning! UDP packet received after first window by {} ms",
+                                -time_til_window
+                            );
                         }
 
                         if !joined {
@@ -215,14 +214,10 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+
         println!("Stopped sending packets. Waiting for close transaction");
 
         let closed = open.block_until_closed_transaction().await.unwrap();
-
-        // println!(
-        //     "ClosedTxn: {:#?} ",
-        //     closed
-        // );
 
         for summary in closed.summaries() {
             if summary.client().as_str() == hotspot_of_interest {
@@ -230,6 +225,11 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        println!("I believe I sent {} packets", sent_packets);
+        println!("Packets sent by device: {}", sent_packets);
+
+
+        // drain the receiver before looping
+        while let Ok(_) = lorawan_receiver.try_recv(){}
+
     }
 }
