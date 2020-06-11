@@ -81,7 +81,7 @@ pub async fn signal_at_block_height(
         let new_height = fetch_block_height().await? as isize;
         if new_height != cur_height {
             cur_height = new_height;
-            println!("Will signal at {}. Currently at {}. {} more blocks to go", threshold, cur_height, threshold - cur_height);
+            //println!("Will signal at {}. Currently at {}. {} more blocks to go", threshold, cur_height, threshold - cur_height);
         };
         delay_for(Duration::from_millis(1000)).await;
     }
@@ -194,8 +194,8 @@ async fn fetch_recent_state_channels() -> std::result::Result<Vec<Data>, Box<dyn
     Ok(response.data)
 }
 
-pub async fn fetch_open_channels(
-) -> std::result::Result<(OpenStateChannel, OpenStateChannel), Box<dyn std::error::Error>> {
+pub async fn fetch_open_channel(
+) -> std::result::Result<OpenStateChannel, Box<dyn std::error::Error>> {
     let state_channels = fetch_recent_state_channels().await?;
     // initial sort
     let mut close = Vec::new();
@@ -226,15 +226,21 @@ pub async fn fetch_open_channels(
         }
     }
 
-    // we've assumed that only two are remaining after matching with closed transactions
-    assert_eq!(still_open.len(), 2);
+    assert!(still_open.len()<=2);
 
-    let open = still_open.pop().unwrap();
-    let pending = still_open.pop().unwrap();
+    // if still_open.len() == 2 {
+    //     let open = ;
+    //     let pending = still_open.pop().unwrap();
+    //     open
+    // }
+    // // we've assumed that only two are remaining after matching with closed transactions
+    // assert_eq!(, 2);
+    //
+    //
+    //
+    // // we've assumed that they're ordered in a way so we can pop to get open and pending
+    // // if we're wrong, the open one won't be 1 nonce less than the pending one
+    // assert_eq!(open.nonce + 1, pending.nonce);
 
-    // we've assumed that they're ordered in a way so we can pop to get open and pending
-    // if we're wrong, the open one won't be 1 nonce less than the pending one
-    assert_eq!(open.nonce + 1, pending.nonce);
-
-    Ok((pending, open))
+    Ok(still_open.pop().unwrap())
 }
