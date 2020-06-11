@@ -1,7 +1,5 @@
 use hyper::{self, body};
-use hyper_tls;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::str;
 use std::time::Duration;
 use tokio::sync::mpsc;
