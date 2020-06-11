@@ -67,7 +67,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 use std::str::FromStr;
 async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
-
     let config = config::load_config(DEVICES_PATH)?;
 
     let device = config.devices[0].clone();
@@ -103,7 +102,7 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     // the delay gives the random number generator get started
     delay_for(Duration::from_millis(50)).await;
 
-    let my_address = SocketAddr::from(([0, 0, 0, 0], 1685));
+    let my_address = SocketAddr::from(([0, 0, 0, 0], 1686));
     let host = SocketAddr::from_str(opt.host.as_str())?;
 
     let (receiver, sender, udp_runtime) = UdpRuntime::new(my_address, host).await?;

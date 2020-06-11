@@ -53,10 +53,7 @@ pub struct Config {
     pub gateways: Option<Vec<String>>,
 }
 
-pub fn load_config(
-    path: &str,
-) -> Result<Config, Box<dyn std::error::Error>> {
-
+pub fn load_config(path: &str) -> Result<Config, Box<dyn std::error::Error>> {
     if !Path::new(path).exists() {
         panic!("No lorawan-devices.json found");
     }
