@@ -77,11 +77,11 @@ pub async fn signal_at_block_height(
     mut sender: mpsc::Sender<udp_radio::Event>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut cur_height = fetch_block_height().await? as isize;
+    println!("Will signal at {}. Currently at {}. {} more blocks to go", threshold, cur_height, threshold - cur_height);
     while cur_height < threshold {
         let new_height = fetch_block_height().await? as isize;
         if new_height != cur_height {
             cur_height = new_height;
-            //println!("Will signal at {}. Currently at {}. {} more blocks to go", threshold, cur_height, threshold - cur_height);
         };
         delay_for(Duration::from_millis(1000)).await;
     }
