@@ -107,11 +107,12 @@ impl OpenStateChannel {
 
     pub async fn block_until_closed_transaction(
         &self,
+        oui: usize,
     ) -> std::result::Result<ClosedStateChannel, Box<dyn std::error::Error>> {
         let mut block_height = fetch_block_height().await?;
 
         loop {
-            let state_channels = fetch_recent_state_channels().await?;
+            let state_channels = fetch_recent_state_channels(oui).await?;
             for txn in state_channels {
                 if let Data::state_channel_close_v1(close_channel) = txn {
                     if close_channel.state_channel.id == self.id {
@@ -181,8 +182,13 @@ pub async fn fetch_block_height() -> std::result::Result<usize, Box<dyn std::err
     Ok(response.data.height)
 }
 
-async fn fetch_recent_state_channels() -> std::result::Result<Vec<Data>, Box<dyn std::error::Error>>
-{
+async fn fetch_recent_state_channels(
+    oui: usize,
+) -> std::result::Result<Vec<Data>, Box<dyn std::error::Error>> {
+    if oui == 0 || oui > 2 {
+        panic!("Invalid OUI");
+    }
+
     #[derive(Deserialize, Serialize, Debug)]
     pub struct StateChannelsResp {
         meta: Meta,
@@ -190,15 +196,16 @@ async fn fetch_recent_state_channels() -> std::result::Result<Vec<Data>, Box<dyn
         cursor: Option<String>,
     }
 
-    let body = fetch(format!("/accounts/{}/activity", DEFAULT_ROUTERS[0]).as_str()).await?;
+    let body = fetch(format!("/accounts/{}/activity", DEFAULT_ROUTERS[oui - 1]).as_str()).await?;
     let data_as_str = str::from_utf8(&body)?;
     let response: StateChannelsResp = serde_json::from_str(&data_as_str)?;
     Ok(response.data)
 }
 
 pub async fn fetch_open_channel(
+    oui: usize,
 ) -> std::result::Result<OpenStateChannel, Box<dyn std::error::Error>> {
-    let state_channels = fetch_recent_state_channels().await?;
+    let state_channels = fetch_recent_state_channels(oui).await?;
     // initial sort
     let mut close = Vec::new();
     let mut open = Vec::new();

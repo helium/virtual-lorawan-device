@@ -79,6 +79,7 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     println!("Virtual device utility only supports one device for now");
     println!("{:#?}", device);
 
+    let oui = device.oui();
     unsafe {
         RANDOM = Some(Mutex::new(Vec::new()));
     }
@@ -129,15 +130,15 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         );
 
         let open = if opt.sc_test {
-            let mut open = fetch_open_channel().await?;
+            let mut open = fetch_open_channel(oui).await?;
             println!("{:#?}", open);
             let mut remaining_blocks = open.remaining_blocks().await?.1;
             println!("Expires in {}", remaining_blocks);
 
             // if it is closing soon, just wait for this one to close
             if remaining_blocks < 3 {
-                open.block_until_closed_transaction().await.unwrap();
-                open = fetch_open_channel().await?;
+                open.block_until_closed_transaction(oui).await.unwrap();
+                open = fetch_open_channel(oui).await?;
                 println!("{:#?}", open);
                 remaining_blocks = open.remaining_blocks().await?.1;
                 println!("Expires in {}", remaining_blocks);
@@ -238,7 +239,7 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(open) = open {
             println!("Stopped sending packets. Waiting for close transaction");
             if let Some(gateways) = &config.gateways {
-                let closed = open.block_until_closed_transaction().await.unwrap();
+                let closed = open.block_until_closed_transaction(oui).await.unwrap();
 
                 for summary in closed.summaries() {
                     for gateway in gateways {
