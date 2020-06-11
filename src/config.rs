@@ -34,6 +34,7 @@ impl Credentials {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Device {
     transmit_delay: usize,
+    oui: usize,
     credentials: Credentials,
 }
 
@@ -41,19 +42,26 @@ impl Device {
     pub fn credentials(&self) -> &Credentials {
         &self.credentials
     }
-
     pub fn transmit_delay(&self) -> u64 {
         self.transmit_delay as u64
     }
 }
 
-pub fn load_devices(path: &str) -> Result<Option<Vec<Device>>, Box<dyn std::error::Error>> {
+#[derive(Deserialize, Serialize)]
+pub struct Config {
+    pub devices: Vec<Device>,
+    pub gateways: Option<Vec<String>>,
+}
+
+pub fn load_config(
+    path: &str,
+) -> Result<Config, Box<dyn std::error::Error>> {
+
     if !Path::new(path).exists() {
-        println!("No lorawan-devices.json found");
-        return Ok(None);
+        panic!("No lorawan-devices.json found");
     }
 
     let contents = fs::read_to_string(path)?;
-    let devices: Vec<Device> = serde_json::from_str(&contents)?;
-    Ok(Some(devices))
+    let config: Config = serde_json::from_str(&contents)?;
+    Ok(config)
 }

@@ -77,7 +77,12 @@ pub async fn signal_at_block_height(
     mut sender: mpsc::Sender<udp_radio::Event>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut cur_height = fetch_block_height().await? as isize;
-    println!("Will signal at {}. Currently at {}. {} more blocks to go", threshold, cur_height, threshold - cur_height);
+    println!(
+        "Will signal at {}. Currently at {}. {} more blocks to go",
+        threshold,
+        cur_height,
+        threshold - cur_height
+    );
     while cur_height < threshold {
         let new_height = fetch_block_height().await? as isize;
         if new_height != cur_height {
@@ -131,7 +136,7 @@ pub struct ClosedStateChannel {
 }
 
 impl ClosedStateChannel {
-    pub fn summaries(&self) -> &Vec<Summaries>{
+    pub fn summaries(&self) -> &Vec<Summaries> {
         &self.state_channel.summaries
     }
 }
@@ -187,8 +192,7 @@ async fn fetch_recent_state_channels() -> std::result::Result<Vec<Data>, Box<dyn
         cursor: Option<String>,
     }
 
-    let body =
-        fetch(format!("/accounts/{}/activity", DEFAULT_ROUTERS[0]).as_str()).await?;
+    let body = fetch(format!("/accounts/{}/activity", DEFAULT_ROUTERS[0]).as_str()).await?;
     let data_as_str = str::from_utf8(&body)?;
     let response: StateChannelsResp = serde_json::from_str(&data_as_str)?;
     Ok(response.data)
@@ -226,7 +230,7 @@ pub async fn fetch_open_channel(
         }
     }
 
-    assert!(still_open.len()<=2);
+    assert!(still_open.len() <= 2);
 
     Ok(if still_open.len() == 2 {
         let open = still_open.pop().unwrap();

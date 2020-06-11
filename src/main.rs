@@ -31,6 +31,10 @@ struct Opt {
     /// Path to JSON devices file
     #[structopt(short, long, default_value = DEVICES_PATH)]
     console: String,
+
+    /// Run State Channel test
+    #[structopt(long)]
+    sc_test: bool,
 }
 
 static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
@@ -64,13 +68,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use std::str::FromStr;
 async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
-    let hotspot_of_interest = "112CgbghEZwMwbKUXfz9i9o4Ysxtio4ucGH24zFNYRRU6V2RtJyk";
+    let config = config::load_config(DEVICES_PATH)?;
 
-    let device = if let Some(devices) = config::load_devices(DEVICES_PATH)? {
-        devices[0].clone()
-    } else {
-        panic!("No devices defined!")
-    };
+    let device = config.devices[0].clone();
+
+    if opt.sc_test && config.gateways.is_none() {
+        panic!("Running State Channel test without gateways in config file isn't useful");
+        // TODO: validate gateway fields
+    }
 
     println!("Virtual device utility only supports one device for now");
     println!("{:#?}", device);
@@ -99,7 +104,6 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     delay_for(Duration::from_millis(50)).await;
 
     let my_address = SocketAddr::from(([0, 0, 0, 0], 1685));
-    //let  = opt.host.parse()?;
     let host = SocketAddr::from_str(opt.host.as_str())?;
 
     let (receiver, sender, udp_runtime) = UdpRuntime::new(my_address, host).await?;
@@ -125,17 +129,32 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             get_random_u32,
         );
 
-        let open = fetch_open_channel().await?;
-        println!("{:#?}", open);
-        println!("Expires in {}", open.remaining_blocks().await?.1);
+        let open = if opt.sc_test {
+            let mut open = fetch_open_channel().await?;
+            println!("{:#?}", open);
+            let mut remaining_blocks = open.remaining_blocks().await?.1;
+            println!("Expires in {}", remaining_blocks);
 
-        let sender_clone = lorawan_sender.clone();
-        let threshold = open.close_height() as isize - 3;
-        tokio::spawn(async move {
-            signal_at_block_height(threshold, sender_clone).await.unwrap();
-        });
+            // if it is closing soon, just wait for this one to close
+            if remaining_blocks < 3 {
+                open.block_until_closed_transaction().await.unwrap();
+                open = fetch_open_channel().await?;
+                println!("{:#?}", open);
+                remaining_blocks = open.remaining_blocks().await?.1;
+                println!("Expires in {}", remaining_blocks);
+            }
 
-        println!("Starting Join");
+            let sender_clone = lorawan_sender.clone();
+            let threshold = open.close_height() as isize - 3;
+            tokio::spawn(async move {
+                signal_at_block_height(threshold, sender_clone)
+                    .await
+                    .unwrap();
+            });
+            Some(open)
+        } else {
+            None
+        };
 
         let mut joined = false;
         lorawan_sender
@@ -168,7 +187,9 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                                     LoRaWanState::WaitingForWindow => {
                                         // for now we immediately fire timer
                                         lorawan_sender
-                                            .send(udp_radio::Event::LoRaWAN(LoRaWanEvent::TimerFired))
+                                            .send(udp_radio::Event::LoRaWAN(
+                                                LoRaWanEvent::TimerFired,
+                                            ))
                                             .await?;
                                     }
                                     LoRaWanState::InWindow => {
@@ -215,21 +236,23 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        println!("Stopped sending packets. Waiting for close transaction");
+        if let Some(open) = open {
+            println!("Stopped sending packets. Waiting for close transaction");
+            if let Some(gateways) = &config.gateways {
+                let closed = open.block_until_closed_transaction().await.unwrap();
 
-        let closed = open.block_until_closed_transaction().await.unwrap();
-
-        for summary in closed.summaries() {
-            if summary.client().as_str() == hotspot_of_interest {
-                println!("{:?}", summary);
+                for summary in closed.summaries() {
+                    for gateway in gateways {
+                        if summary.client().as_str() == gateway {
+                            println!("{:?}", summary);
+                        }
+                    }
+                }
             }
         }
-
         println!("Packets sent by device: {}", sent_packets);
 
-
         // drain the receiver before looping
-        while let Ok(_) = lorawan_receiver.try_recv(){}
-
+        while let Ok(_) = lorawan_receiver.try_recv() {}
     }
 }
