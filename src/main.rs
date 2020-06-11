@@ -253,6 +253,6 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         println!("Packets sent by device: {}", sent_packets);
 
         // drain the receiver before looping
-        while let Ok(_) = lorawan_receiver.try_recv() {}
+        while lorawan_receiver.try_recv().is_ok() {}
     }
 }
