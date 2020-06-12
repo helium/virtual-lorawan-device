@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
+use chrono::Utc;
 use lorawan_device::{
     Device as LoRaWanDevice, Event as LoRaWanEvent, Request as LoRaWanRequest,
     State as LoRaWanState,
@@ -206,29 +207,38 @@ async fn run(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
                     if let LoRaWanState::JoinedIdle = response.state() {
                         let time_til_window = radio.time_until_window_ms();
+
+                        print!("{}  ", Utc::now().format("[%F %H:%M:%S%.3f]"));
+
+                        if !joined {
+                            print!("Join Accept");
+                            joined = true;
+                        } else {
+                            print!("Downlink Rx")
+                        }
+
                         if time_til_window > 0 {
                             println!(
-                                "Packet received, but waiting for window: {} ms (time to spare)",
+                                "\tPacket received, but waiting for window: {} ms (time to spare)",
                                 time_til_window
                             );
                             delay_for(Duration::from_millis(time_til_window as u64)).await;
                         } else {
                             println!(
-                                "Warning! UDP packet received after first window by {} ms",
+                                "\tWarning! UDP packet received after first window by {} ms",
                                 -time_til_window
                             );
                         }
 
-                        if !joined {
-                            println!("Join Success!");
-                            joined = true;
-                        }
-
                         let additional_delay = device.transmit_delay();
-                        //println!("Additional delay: {} ms", additional_delay);
+                        print!("{}  ", Utc::now().format("[%F %H:%M:%S%.3f]"));
+                        println!("RX Window Reached, waiting for {} ms", additional_delay);
                         delay_for(Duration::from_millis(additional_delay)).await;
                         let data = [1, 2, 3, 4];
-                        //println!("Sending DataUp");
+
+                        print!("{}  ", Utc::now().format("[%F %H:%M:%S%.3f]"));
+                        println!("Sending Uplink");
+
                         lorawan.send(&mut radio, &data, 1, true);
                         sent_packets += 1;
                     }
