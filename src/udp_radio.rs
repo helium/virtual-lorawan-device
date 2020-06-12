@@ -18,6 +18,7 @@ pub enum RadioEvent {
 pub enum Event {
     Radio(RadioEvent),
     LoRaWAN(LorawanEvent),
+    Shutdown,
 }
 
 struct Settings {
@@ -95,6 +96,7 @@ use std::time::Instant;
 
 pub struct UdpRadio {
     sender: Sender<udp_runtime::TxMessage>,
+    lorawan_sender: Sender<Event>,
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
     time: Instant,
@@ -108,6 +110,7 @@ impl UdpRadio {
         receiver: Receiver<udp_runtime::RxMessage>,
     ) -> (Receiver<Event>, UdpRadioRuntime, Sender<Event>, UdpRadio) {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
+        let lorawan_sender_clone = lorawan_sender.clone();
         let lorawan_sender_another_clone = lorawan_sender.clone();
 
         (
@@ -119,6 +122,7 @@ impl UdpRadio {
             lorawan_sender_another_clone,
             UdpRadio {
                 sender,
+                lorawan_sender: lorawan_sender_clone,
                 rx_buffer: HVec::new(),
                 settings: Settings::default(),
                 time: Instant::now(),
@@ -178,6 +182,14 @@ impl Radio for UdpRadio {
 
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)
+        }
+
+        // sending the packet pack to ourselves simulates a SX12xx DI0 interrupt
+        if let Err(e) = self
+            .lorawan_sender
+            .try_send(Event::Radio(RadioEvent::TxDone))
+        {
+            panic!("LoRaWAN Queue Overflow! {}", e)
         }
     }
 
@@ -243,7 +255,8 @@ impl Radio for UdpRadio {
                         Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
                     }
                 }
-                semtech_udp::PacketData::PushAck => State::TxDone,
+                // this will probably cause an issue once we get rid of confirmed downlinks
+                semtech_udp::PacketData::PushAck => State::Busy,
                 semtech_udp::PacketData::PullAck => State::Busy,
                 _ => panic!("Unhandled packet type: {:?}", pkt.data),
             },

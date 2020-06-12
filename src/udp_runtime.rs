@@ -127,7 +127,6 @@ impl UdpRuntimeTx {
                 data.set_token(super::get_random_u32() as u16);
                 let n = data.serialize(&mut buf)? as usize;
                 let _sent = self.socket_send.send(&buf[..n]).await?;
-                delay_for(Duration::from_millis(1000)).await;
             }
         }
     }
