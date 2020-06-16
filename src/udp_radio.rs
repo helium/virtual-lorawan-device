@@ -18,6 +18,7 @@ pub enum RadioEvent {
 pub enum Event {
     Radio(RadioEvent),
     CreateSession,
+    Timeout,
     SendPacket,
     Shutdown,
 }
@@ -63,7 +64,7 @@ pub struct UdpRadioRuntime {
     lorawan_sender: Sender<Event>,
 }
 
-impl UdpRadioRuntime{
+impl UdpRadioRuntime {
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             if let Some(event) = self.receiver.recv().await {
@@ -88,8 +89,8 @@ pub struct UdpRadio {
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
     time: Instant,
-    window_start: usize,
-    window_close: usize,
+    window_start: u32,
+    window_close: u32,
 }
 
 impl UdpRadio {
@@ -112,7 +113,9 @@ impl UdpRadio {
                 sender,
                 lorawan_sender: lorawan_sender_clone,
                 rx_buffer: HVec::new(),
-                settings: Settings { rfconfig: RfConfig::default() },
+                settings: Settings {
+                    rfconfig: RfConfig::default(),
+                },
                 time: Instant::now(),
                 window_start: 0,
                 window_close: 0,
@@ -120,21 +123,14 @@ impl UdpRadio {
         )
     }
 
-    pub fn timer_request(&mut self, state: LorawanState<UdpRadio>, delay: usize) {
-        // match state {
-        //     LorawanState::WaitingForWindow => {
-        //         self.window_start = self.time.elapsed().as_micros() as usize + delay * 1000;
-        //     }
-        //     LorawanState::InWindow => {
-        //         self.window_close = self.window_start + delay;
-        //     }
-        //     _ => panic!("Unhandled state"),
-        // }
+    pub fn timer(&mut self, delay: u32) {
+        self.window_start = delay;
     }
 
     pub fn time_until_window_ms(&self) -> isize {
-        let time = self.time.elapsed().as_micros() as isize;
-        (self.window_start as isize - time) / 1000
+        println!("{}", self.time.elapsed().as_millis());
+        let time = self.time.elapsed().as_millis() as isize;
+        (self.window_start as isize - time)
     }
 }
 
@@ -168,6 +164,8 @@ impl PhyRxTx for UdpRadio {
         let packet =
             semtech_udp::Packet::from_data(PacketData::PushData(PushData { rxpk, stat: None }));
 
+        println!("sending packet!");
+
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)
         }
@@ -189,10 +187,7 @@ impl PhyRxTx for UdpRadio {
         self.settings.rfconfig = config.rf;
     }
 
-    fn configure_rx(
-        &mut self,
-        config: RfConfig
-    ) {
+    fn configure_rx(&mut self, config: RfConfig) {
         self.settings.rfconfig = config;
     }
 
@@ -202,8 +197,9 @@ impl PhyRxTx for UdpRadio {
     }
 
     fn handle_phy_event(&mut self, event: RadioEvent) -> Option<PhyResponse> {
+        println!("Handling PhyEvent {:?}", event);
         match event {
-            RadioEvent::TxDone => Some(PhyResponse::TxDone(0)),
+            RadioEvent::TxDone => Some(PhyResponse::TxDone(self.time.elapsed().as_micros() as u32)),
             RadioEvent::UdpRx(pkt) => match pkt.data {
                 semtech_udp::PacketData::PullResp(pull_data) => {
                     let txpk = pull_data.txpk;
@@ -215,7 +211,6 @@ impl PhyRxTx for UdpRadio {
                                     panic!("Error pushing data into rx_buffer {}", e);
                                 }
                             }
-
                             Some(PhyResponse::RxDone(RxQuality::new(-115, 4)))
                         }
                         Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),

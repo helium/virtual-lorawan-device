@@ -4,8 +4,8 @@ use udp_runtime::UdpRuntime;
 mod udp_radio;
 use chrono::Utc;
 use lorawan_device::{
-    Device as LoRaWanDevice, Event as LoRaWanEvent,
-    State as LoRaWanState, Response as LoRaWanResponse
+    radio, Device as LoRaWanDevice, Event as LoRaWanEvent, Response as LoRaWanResponse,
+    State as LoRaWanState,
 };
 use rand::Rng;
 use std::process;
@@ -14,7 +14,7 @@ use std::time::Duration;
 use std::{thread, time};
 use structopt::StructOpt;
 use tokio::time::delay_for;
-use udp_radio::UdpRadio;
+use udp_radio::{RadioEvent, UdpRadio};
 
 mod state_channels;
 use state_channels::*;
@@ -169,15 +169,54 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             if let Some(event) = lorawan_receiver.recv().await {
                 let (new_state, response) = match event {
                     udp_radio::Event::CreateSession => {
+                        println!("Creating Session");
                         let event = LoRaWanEvent::NewSession;
                         lorawan.handle_event(&mut radio, event)
                     }
                     udp_radio::Event::SendPacket => {
-                        let data = [12,3,4,5];
+                        println!("Send Packet");
+                        let data = [12, 3, 4, 5];
                         lorawan.send(&mut radio, &data, 2, true)
                     }
-                    udp_radio::Event::Radio(_) => {
-                        panic!("Not done");
+                    udp_radio::Event::Radio(event) => {
+                        if let udp_radio::RadioEvent::UdpRx(packet) = &event {
+                            if let semtech_udp::PacketData::PullResp(_) = packet.data {
+
+                                let time_til_window = radio.time_until_window_ms();
+
+                                print!("{}  ", Utc::now().format("[%F %H:%M:%S%.3f]"));
+
+                                if !joined {
+                                    print!("Join Accept");
+                                    joined = true;
+                                } else {
+                                    print!("Downlink Rx")
+                                }
+
+                                if time_til_window > 0 {
+                                    println!(
+                                        "\tPacket received, but waiting for window: {} ms (time to spare)",
+                                        time_til_window
+                                    );
+                                    delay_for(Duration::from_millis(time_til_window as u64)).await;
+                                } else {
+                                    println!(
+                                        "\tWarning! UDP packet received after first window by {} ms",
+                                        -time_til_window
+                                    );
+                                }
+
+                                let additional_delay = device.transmit_delay();
+                                println!("Downlink packet!");
+                            }
+                        }
+
+                        let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event));
+                        lorawan.handle_event(&mut radio, event)
+                    }
+                    udp_radio::Event::Timeout => {
+                        let event = LoRaWanEvent::RadioEvent(radio::Event::Timeout);
+                        lorawan.handle_event(&mut radio, event)
                     }
                     udp_radio::Event::Shutdown => {
                         panic!("Not done");
@@ -187,22 +226,33 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                 lorawan = new_state;
 
                 match response {
-                    Ok(response) => {
-                        match response {
-                            LoRaWanResponse::TimeoutRequest(delay) => {}
-                            LoRaWanResponse::Idle => {},
-                            LoRaWanResponse::Rx => {},        // packet received
-                            LoRaWanResponse::TxComplete => {},
-                            LoRaWanResponse::Txing => {},
-                            LoRaWanResponse::Rxing => {},
+                    Ok(response) => match response {
+                        LoRaWanResponse::TimeoutRequest(delay) => {
+                            println!("Timeout Request: {}", delay);
+                            radio.timer(delay);
+                            lorawan_sender.send(udp_radio::Event::Timeout);
                         }
-                    }
+                        LoRaWanResponse::Idle => {
+                            println!("Idle");
+                        }
+                        LoRaWanResponse::Rx => {
+                            println!("Received packet!");
+                        }
+                        LoRaWanResponse::TxComplete => {
+                            println!("TxComplete");
+                        }
+                        LoRaWanResponse::Txing => {
+                            println!("Transmitting");
+                        }
+                        LoRaWanResponse::Rxing => {
+                            println!("Receiving");
+                        }
+                    },
                     Err(e) => {
                         panic!("LoRaWAN Stack Error");
                     }
                 }
             }
-
         }
 
         if let Some(open) = open {
