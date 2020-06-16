@@ -210,12 +210,12 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                                 println!("Downlink packet!");
                             }
                         }
-
+                        println!("event {:?}", event);
                         let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event));
                         lorawan.handle_event(&mut radio, event)
                     }
                     udp_radio::Event::Timeout => {
-                        let event = LoRaWanEvent::RadioEvent(radio::Event::Timeout);
+                        let event = LoRaWanEvent::Timeout;
                         lorawan.handle_event(&mut radio, event)
                     }
                     udp_radio::Event::Shutdown => {
@@ -226,26 +226,28 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                 lorawan = new_state;
 
                 match response {
-                    Ok(response) => match response {
-                        LoRaWanResponse::TimeoutRequest(delay) => {
-                            println!("Timeout Request: {}", delay);
-                            radio.timer(delay);
-                            lorawan_sender.send(udp_radio::Event::Timeout);
-                        }
-                        LoRaWanResponse::Idle => {
-                            println!("Idle");
-                        }
-                        LoRaWanResponse::Rx => {
-                            println!("Received packet!");
-                        }
-                        LoRaWanResponse::TxComplete => {
-                            println!("TxComplete");
-                        }
-                        LoRaWanResponse::Txing => {
-                            println!("Transmitting");
-                        }
-                        LoRaWanResponse::Rxing => {
-                            println!("Receiving");
+                    Ok(response) => {
+                        println!("LoRaWAN Response: {:?}", response);
+                        match response {
+                            LoRaWanResponse::TimeoutRequest(delay) => {
+                                println!("Timeout Request: {}", delay);
+                                radio.timer(delay);
+                                lorawan_sender.send(udp_radio::Event::Timeout).await?;
+                            }
+                            LoRaWanResponse::NewSession => {
+                                println!("Join Success");
+                            }
+                            LoRaWanResponse::Idle => (),
+                            LoRaWanResponse::Rx => {
+                                println!("Received packet!");
+                            }
+                            LoRaWanResponse::TxComplete => {
+                                println!("TxComplete");
+                            }
+                            LoRaWanResponse::Rxing => {
+                                println!("Receiving");
+                            }
+                            _ => (),
                         }
                     },
                     Err(e) => {

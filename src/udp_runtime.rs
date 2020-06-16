@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{self, Receiver, Sender};
+use semtech_udp::PacketData;
 
 pub type RxMessage = semtech_udp::Packet;
 pub type TxMessage = semtech_udp::Packet;
@@ -108,7 +109,11 @@ impl UdpRuntimeRx {
             match self.socket_recv.recv(&mut buf).await {
                 Ok(n) => {
                     let packet = semtech_udp::Packet::parse(&buf[0..n], n)?;
-                    self.sender.send(packet).await?
+                    match packet.data {
+                        PacketData::PullAck | PacketData::PushAck => (),
+                        _ => self.sender.send(packet).await?,
+                    }
+
                 }
                 Err(e) => return Err(e.into()),
             }
