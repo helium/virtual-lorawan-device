@@ -128,7 +128,6 @@ impl UdpRadio {
     }
 
     pub fn time_until_window_ms(&self) -> isize {
-        println!("{}", self.time.elapsed().as_millis());
         let time = self.time.elapsed().as_millis() as isize;
         (self.window_start as isize - time)
     }
@@ -164,8 +163,6 @@ impl PhyRxTx for UdpRadio {
         let packet =
             semtech_udp::Packet::from_data(PacketData::PushData(PushData { rxpk, stat: None }));
 
-        println!("sending packet!");
-
         if let Err(e) = self.sender.try_send(packet) {
             panic!("UdpTx Queue Overflow! {}", e)
         }
@@ -197,9 +194,8 @@ impl PhyRxTx for UdpRadio {
     }
 
     fn handle_phy_event(&mut self, event: RadioEvent) -> Option<PhyResponse> {
-        println!("Handling PhyEvent {:?}", event);
         match event {
-            RadioEvent::TxDone => Some(PhyResponse::TxDone(self.time.elapsed().as_micros() as u32)),
+            RadioEvent::TxDone => Some(PhyResponse::TxDone(self.time.elapsed().as_millis() as u32)),
             RadioEvent::UdpRx(pkt) => match pkt.data {
                 semtech_udp::PacketData::PullResp(pull_data) => {
                     let txpk = pull_data.txpk;
