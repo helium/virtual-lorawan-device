@@ -4,6 +4,8 @@ use heapless::Vec as HVec;
 use lorawan_device::{radio::*, Event as LorawanEvent, State as LorawanState, Timings};
 use semtech_udp::{PacketData, PushData, RxPk};
 use tokio::sync::mpsc::{self, Receiver, Sender};
+use std::time::Duration;
+use tokio::time::delay_for;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -16,11 +18,13 @@ pub enum RadioEvent {
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Event {
-    Radio(RadioEvent),
+    RadioRaw(RadioEvent),
+    RadioReady(RadioEvent),
     CreateSession,
     Timeout,
     SendPacket,
     Shutdown,
+    TxDone(RadioEvent)
 }
 
 impl Settings {
@@ -69,7 +73,7 @@ impl UdpRadioRuntime {
         loop {
             if let Some(event) = self.receiver.recv().await {
                 self.lorawan_sender
-                    .send(Event::Radio(RadioEvent::UdpRx(event)))
+                    .send(Event::RadioRaw(RadioEvent::UdpRx(event)))
                     .await?;
             }
         }
@@ -88,7 +92,7 @@ pub struct UdpRadio {
     lorawan_sender: Sender<Event>,
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
-    time: Instant,
+    pub time: Instant,
     window_start: u32,
     window_close: u32,
 }
@@ -123,7 +127,14 @@ impl UdpRadio {
         )
     }
 
-    pub fn timer(&mut self, delay: u32) {
+    pub async fn timer(&mut self, future_time: u32) {
+        let mut sender = self.lorawan_sender.clone();
+        let delay =             future_time - self.time.elapsed().as_millis() as u32;
+
+        tokio::spawn(async move {
+            delay_for(Duration::from_millis(delay as u64)).await;
+            sender.send(Event::Timeout).await.unwrap();
+        });
         self.window_start = delay;
     }
 
@@ -170,7 +181,7 @@ impl PhyRxTx for UdpRadio {
         // sending the packet pack to ourselves simulates a SX12xx DI0 interrupt
         if let Err(e) = self
             .lorawan_sender
-            .try_send(Event::Radio(RadioEvent::TxDone))
+            .try_send(Event::TxDone(RadioEvent::TxDone))
         {
             panic!("LoRaWAN Queue Overflow! {}", e)
         }
@@ -222,10 +233,10 @@ impl PhyRxTx for UdpRadio {
 }
 
 impl Timings for UdpRadio {
-    fn get_rx_window_offset_ms(&mut self) -> isize {
+    fn get_rx_window_offset_ms(&mut self) -> i32 {
         0
     }
-    fn get_rx_window_duration_ms(&mut self) -> usize {
+    fn get_rx_window_duration_ms(&mut self) -> u32 {
         100
     }
 }
