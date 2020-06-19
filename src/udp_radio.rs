@@ -100,18 +100,11 @@ impl UdpRadioRuntime {
                                     sender.send(data.into()).await.unwrap();
                                 });
                             } else {
-                                let time_since_first_window = time - scheduled_time;
-
+                                let time_since_scheduled_time = time - scheduled_time;
                                 debugln!(
-                                            "Warning! UDP packet received after first window by {} ms",
-                                            time_since_first_window
+                                            "Warning! UDP packet received after tx time by {} ms",
+                                            time_since_scheduled_time
                                         );
-
-                                if time_since_first_window < 1000 + 80 {
-                                    tokio::spawn(async move {
-                                        sender.send(data.into()).await.unwrap();
-                                    });
-                                }
                             }
                         },
                         StringOrNum::S(s) => {

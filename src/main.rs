@@ -143,6 +143,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     });
 
     loop {
+        let transmit_delay = device.transmit_delay();
         let mut lorawan = LoRaWanDevice::new(
             device.credentials().deveui_cloned_into_buf()?,
             device.credentials().appeui_cloned_into_buf()?,
@@ -201,24 +202,9 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                         let data = [12, 3, 4, 5];
                         lorawan.send(&mut radio, &data, 2, true)
                     }
-                    // udp_radio::Event::RadioReady(event) => {
-                    //     let time = radio.time.elapsed().as_millis();
-                    //     match &event.txpk.tmst {
-                    //         StringOrNum::N(n) => {
-                    //             if time < (n/1000 + 100).into() {
-                    //                 let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event));
-                    //                 lorawan.handle_event(&mut radio, event)
-                    //             } else {
-                    //                 (lorawan, Ok(LoRaWanResponse::Idle) )
-                    //             }
-                    //         }
-                    //         _ => (lorawan, Ok(LoRaWanResponse::Idle) )
-                    //     }
-                    // }
                     udp_radio::Event::Rx(event) => {
                         let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event.into()));
                         lorawan.handle_event(&mut radio, event)
-
                     }
                     udp_radio::Event::Timeout => {
                         lorawan.handle_event(&mut radio, LoRaWanEvent::Timeout)
@@ -235,19 +221,33 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
                         match response {
                             LoRaWanResponse::TimeoutRequest(delay) => {
-                                debugln!("Timeout Request: {}", delay);
                                 radio.timer(delay).await;
                             }
                             LoRaWanResponse::NewSession => {
                                 debugln!("Join Success");
-                                // send packet
-                                lorawan_sender.send(udp_radio::Event::SendPacket).await?;
+                                let mut sender = lorawan_sender.clone();
+                                tokio::spawn(async move {
+                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
+                                });
                             }
                             LoRaWanResponse::Idle => {
                                 debugln!("Idle");
-                            },
-                            LoRaWanResponse::DataDown | LoRaWanResponse::ReadyToSend |  LoRaWanResponse::NoAck => {
-                                lorawan_sender.send(udp_radio::Event::SendPacket).await?;
+                            }
+                            LoRaWanResponse::NoAck => {
+                                debugln!("NoAck");
+                                let mut sender = lorawan_sender.clone();
+                                tokio::spawn(async move {
+                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
+                                });
+                            }
+                            LoRaWanResponse::DataDown | LoRaWanResponse::ReadyToSend => {
+                                let mut sender = lorawan_sender.clone();
+                                tokio::spawn(async move {
+                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
+                                });
                             }
                             LoRaWanResponse::TxComplete => {
                                 debugln!("TxComplete");
