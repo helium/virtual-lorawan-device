@@ -178,7 +178,6 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             None
         };
 
-        let mut joined = false;
         lorawan_sender
             .try_send(udp_radio::Event::CreateSession)
             .unwrap();
@@ -203,14 +202,16 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                         lorawan.send(&mut radio, &data, 2, true)
                     }
                     udp_radio::Event::Rx(event) => {
+                        debugln!("Dispatching RxPacket");
                         let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event.into()));
                         lorawan.handle_event(&mut radio, event)
                     }
                     udp_radio::Event::Timeout => {
+                        debugln!("Dispatchimg Timeout");
                         lorawan.handle_event(&mut radio, LoRaWanEvent::Timeout)
                     }
                     udp_radio::Event::Shutdown => {
-                        panic!("Not done");
+                        break;
                     }
                 };
 
@@ -242,7 +243,16 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
                                     sender.send(udp_radio::Event::SendPacket).await.unwrap();
                                 });
                             }
-                            LoRaWanResponse::DataDown | LoRaWanResponse::ReadyToSend => {
+                            LoRaWanResponse::ReadyToSend => {
+                                debugln!("No downlink received but none expected - ready to send again");
+                                let mut sender = lorawan_sender.clone();
+                                tokio::spawn(async move {
+                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
+                                });
+                            }
+                            LoRaWanResponse::DataDown => {
+                                debugln!("Received downlink or ACK");
                                 let mut sender = lorawan_sender.clone();
                                 tokio::spawn(async move {
                                     delay_for(Duration::from_millis(transmit_delay as u64)).await;

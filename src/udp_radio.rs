@@ -132,7 +132,6 @@ pub struct UdpRadio {
     settings: Settings,
     pub time: Instant,
     window_start: u32,
-    window_close: u32,
 }
 
 impl UdpRadio {
@@ -162,7 +161,6 @@ impl UdpRadio {
                 },
                 time,
                 window_start: 0,
-                window_close: 0,
             },
         )
     }
@@ -176,11 +174,6 @@ impl UdpRadio {
             sender.send(Event::Timeout).await.unwrap();
         });
         self.window_start = delay;
-    }
-
-    pub fn time_until_window_ms(&self) -> isize {
-        let time = self.time.elapsed().as_millis() as isize;
-        (self.window_start as isize - time)
     }
 }
 
