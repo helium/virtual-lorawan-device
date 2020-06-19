@@ -1,8 +1,9 @@
-use super::udp_runtime;
+#![macro_use]
+use super::{udp_runtime, debugln, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use lorawan_device::{radio::*, Event as LorawanEvent, State as LorawanState, Timings};
-use semtech_udp::{PacketData, PushData, RxPk};
+use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use tokio::time::delay_for;
@@ -11,20 +12,31 @@ use tokio::time::delay_for;
 #[allow(dead_code)]
 #[allow(clippy::large_enum_variant)]
 pub enum RadioEvent {
-    UdpRx(udp_runtime::RxMessage),
+    Rx(semtech_udp::PullResp),
     TxDone,
+}
+
+impl From<semtech_udp::PullResp> for  RadioEvent{
+    fn from(rx: semtech_udp::PullResp) -> Self {
+        RadioEvent::Rx(rx)
+    }
 }
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Event {
-    RadioRaw(RadioEvent),
-    RadioReady(RadioEvent),
+    Rx(semtech_udp::PullResp),
     CreateSession,
     Timeout,
     SendPacket,
     Shutdown,
-    TxDone(RadioEvent)
+    TxDone
+}
+
+impl From<semtech_udp::PullResp> for  Event{
+    fn from(rx: semtech_udp::PullResp) -> Self {
+        Event::Rx(rx)
+    }
 }
 
 impl Settings {
@@ -66,15 +78,48 @@ impl Settings {
 pub struct UdpRadioRuntime {
     receiver: Receiver<udp_runtime::RxMessage>,
     lorawan_sender: Sender<Event>,
+    time: Instant
 }
 
 impl UdpRadioRuntime {
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             if let Some(event) = self.receiver.recv().await {
-                self.lorawan_sender
-                    .send(Event::RadioRaw(RadioEvent::UdpRx(event)))
-                    .await?;
+                if let semtech_udp::PacketData::PullResp(data) = event.data {
+                    let mut sender = self.lorawan_sender.clone();
+
+                    match &data.txpk.tmst {
+                        StringOrNum::N(n) => {
+                            let scheduled_time = n/1000;
+                            let time = self.time.elapsed().as_millis() as u64;
+                            if scheduled_time > time  {
+                                // make units the same
+                                let delay = scheduled_time - time as u64;
+                                tokio::spawn(async move {
+                                    delay_for(Duration::from_millis(delay + 50 )).await;
+                                    sender.send(data.into()).await.unwrap();
+                                });
+                            } else {
+                                let time_since_first_window = time - scheduled_time;
+
+                                debugln!(
+                                            "Warning! UDP packet received after first window by {} ms",
+                                            time_since_first_window
+                                        );
+
+                                if time_since_first_window < 1000 + 80 {
+                                    tokio::spawn(async move {
+                                        sender.send(data.into()).await.unwrap();
+                                    });
+                                }
+                            }
+                        },
+                        StringOrNum::S(s) => {
+                            debugln!(
+                                    "\tWarning! UDP packet sent with \"immediate\"");
+                        }
+                    }
+                }
             }
         }
     }
@@ -101,16 +146,18 @@ impl UdpRadio {
     pub fn new(
         sender: Sender<udp_runtime::TxMessage>,
         receiver: Receiver<udp_runtime::RxMessage>,
+        time: Instant,
     ) -> (Receiver<Event>, UdpRadioRuntime, Sender<Event>, UdpRadio) {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
         let lorawan_sender_clone = lorawan_sender.clone();
         let lorawan_sender_another_clone = lorawan_sender.clone();
-
+        let time_clone= time.clone();
         (
             lorawan_receiver,
             UdpRadioRuntime {
                 receiver,
                 lorawan_sender,
+                time: time_clone
             },
             lorawan_sender_another_clone,
             UdpRadio {
@@ -120,7 +167,7 @@ impl UdpRadio {
                 settings: Settings {
                     rfconfig: RfConfig::default(),
                 },
-                time: Instant::now(),
+                time,
                 window_start: 0,
                 window_close: 0,
             },
@@ -181,7 +228,7 @@ impl PhyRxTx for UdpRadio {
         // sending the packet pack to ourselves simulates a SX12xx DI0 interrupt
         if let Err(e) = self
             .lorawan_sender
-            .try_send(Event::TxDone(RadioEvent::TxDone))
+            .try_send(Event::TxDone)
         {
             panic!("LoRaWAN Queue Overflow! {}", e)
         }
@@ -207,34 +254,26 @@ impl PhyRxTx for UdpRadio {
     fn handle_phy_event(&mut self, event: RadioEvent) -> Option<PhyResponse> {
         match event {
             RadioEvent::TxDone => Some(PhyResponse::TxDone(self.time.elapsed().as_millis() as u32)),
-            RadioEvent::UdpRx(pkt) => match pkt.data {
-                semtech_udp::PacketData::PullResp(pull_data) => {
-                    let txpk = pull_data.txpk;
-                    match base64::decode(txpk.data) {
-                        Ok(data) => {
-                            self.rx_buffer.clear();
-                            for el in data {
-                                if let Err(e) = self.rx_buffer.push(el) {
-                                    panic!("Error pushing data into rx_buffer {}", e);
-                                }
+            RadioEvent::Rx(pkt) =>
+                match base64::decode(pkt.txpk.data) {
+                    Ok(data) => {
+                        self.rx_buffer.clear();
+                        for el in data {
+                            if let Err(e) = self.rx_buffer.push(el) {
+                                panic!("Error pushing data into rx_buffer {}", e);
                             }
-                            Some(PhyResponse::RxDone(RxQuality::new(-115, 4)))
                         }
-                        Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
+                        Some(PhyResponse::RxDone(RxQuality::new(-115, 4)))
                     }
+                    Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
                 }
-                // this will probably cause an issue once we get rid of confirmed downlinks
-                semtech_udp::PacketData::PushAck => Some(PhyResponse::Busy),
-                semtech_udp::PacketData::PullAck => Some(PhyResponse::Busy),
-                _ => panic!("Unhandled packet type: {:?}", pkt.data),
-            },
-        }
+         }
     }
 }
 
 impl Timings for UdpRadio {
     fn get_rx_window_offset_ms(&mut self) -> i32 {
-        0
+        20
     }
     fn get_rx_window_duration_ms(&mut self) -> u32 {
         100

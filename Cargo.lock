@@ -1115,6 +1115,7 @@ dependencies = [
  "hex",
  "hyper",
  "hyper-tls",
+ "lazy_static",
  "lorawan-device",
  "rand",
  "semtech-udp",

@@ -1,8 +1,9 @@
+#[macro_use]
+extern crate lazy_static;
 use std::net::SocketAddr;
 mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
-use chrono::Utc;
 use lorawan_device::{
     radio, Device as LoRaWanDevice, Event as LoRaWanEvent, Response as LoRaWanResponse,
     State as LoRaWanState,
@@ -14,7 +15,7 @@ use std::time::Duration;
 use std::{thread, time};
 use structopt::StructOpt;
 use tokio::time::delay_for;
-use udp_radio::{RadioEvent, UdpRadio};
+use udp_radio::{UdpRadio, RadioEvent};
 use semtech_udp::StringOrNum;
 mod state_channels;
 use state_channels::*;
@@ -57,6 +58,17 @@ fn get_random_u32() -> u32 {
     }
 }
 
+#[macro_export]
+macro_rules! debugln {
+    ($fmt:expr) => { print!("{} | {: >8}] ", chrono::Utc::now().format("[%F %H:%M:%S%.3f "), INSTANT.elapsed().as_millis());
+        println!($fmt);
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        print!("{} | {: >8}] ", chrono::Utc::now().format("[%F %H:%M:%S%.3f "), INSTANT.elapsed().as_millis());
+        println!($fmt, $($arg)*);
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Opt::from_args();
@@ -66,6 +78,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+use std::time::Instant;
+
+
+
+lazy_static! {
+    static ref INSTANT: Instant = Instant::now();
+}
+
 use std::str::FromStr;
 async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let config = config::load_config(DEVICES_PATH)?;
@@ -116,7 +136,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     // UdpRadio implements the LoRaWAN device Radio trait
     // use it by sending requested via the lorawan_sender
     let (mut lorawan_receiver, mut radio_runtime, mut lorawan_sender, mut radio) =
-        UdpRadio::new(sender, receiver);
+        UdpRadio::new(sender, receiver, INSTANT.clone());
 
     tokio::spawn(async move {
         radio_runtime.run().await.unwrap();
@@ -168,98 +188,36 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             if let Some(event) = lorawan_receiver.recv().await {
                 let (new_state, response) = match event {
                     udp_radio::Event::CreateSession => {
-                        print!("{} | {}] ", Utc::now().format("[%F %H:%M:%S%.3f "), radio.time.elapsed().as_millis());
-                        println!("Creating Session");
+                        debugln!("Creating Session");
                         let event = LoRaWanEvent::NewSession;
                         lorawan.handle_event(&mut radio, event)
                     }
-                    udp_radio::Event::TxDone(event) => {
-                        let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event));
+                    udp_radio::Event::TxDone => {
+                        let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(RadioEvent::TxDone));
                         lorawan.handle_event(&mut radio, event)
                     }
                     udp_radio::Event::SendPacket => {
-                        print!("{} | {}] ", Utc::now().format("[%F %H:%M:%S%.3f "), radio.time.elapsed().as_millis());
-                        println!("Sending DataUp");
+                        debugln!("Sending DataUp");
                         let data = [12, 3, 4, 5];
                         lorawan.send(&mut radio, &data, 2, true)
                     }
-                    udp_radio::Event::RadioReady(event) => {
-                        let time = radio.time.elapsed().as_millis();
-
-                        if let udp_radio::RadioEvent::UdpRx(packet) = &event {
-                            if let semtech_udp::PacketData::PullResp(data) = &packet.data {
-                                match &data.txpk.tmst {
-                                    StringOrNum::N(n) => {
-                                        if time < (n/1000 + 100).into() {
-                                            println!("Dispatching {} {}", time, n/1000+100);
-                                            let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event));
-                                            lorawan.handle_event(&mut radio, event)
-                                        } else {
-                                            println!("Dropping late packet");
-                                            (lorawan, Ok(LoRaWanResponse::Idle) )
-                                        }
-                                    }
-                                    _ => (lorawan, Ok(LoRaWanResponse::Idle) )
-                                }
-                            } else {
-                                (lorawan, Ok(LoRaWanResponse::Idle) )
-                            }
-                        } else {
-                            (lorawan, Ok(LoRaWanResponse::Idle) )
-
-                        }
-
-                    }
-                    udp_radio::Event::RadioRaw(event) => {
-                        if let udp_radio::RadioEvent::UdpRx(packet) = event {
-                            if let semtech_udp::PacketData::PullResp(data) = &packet.data {
-                                match &data.txpk.tmst {
-                                    StringOrNum::N(n) => {
-                                        let scheduled_time = n/1000;
-                                        let time = radio.time.elapsed().as_millis() as u64;
-                                        if scheduled_time > time  {
-                                            // make units the same
-                                            let delay = scheduled_time - time as u64;
-                                            let mut sender = lorawan_sender.clone();
-                                            println!("Deferring packet");
-                                            tokio::spawn(async move {
-                                                delay_for(Duration::from_millis(delay + 50 )).await;
-                                                println!("Dispatching packet");
-                                                sender.send(udp_radio::Event::RadioReady(udp_radio::RadioEvent::UdpRx(packet.clone()))).await.unwrap();
-                                            });
-                                            (lorawan, Ok(LoRaWanResponse::Idle) )
-
-                                        } else {
-                                            let time_since_first_window = time - scheduled_time;
-
-                                            let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(udp_radio::RadioEvent::UdpRx(packet.clone())));
-                                            println!(
-                                                "\tWarning! UDP packet received after first window by {} ms",
-                                                time_since_first_window
-                                            );
-                                            if time_since_first_window < 1000 + 100 {
-                                                lorawan.handle_event(&mut radio, event)
-                                            } else {
-                                                (lorawan, Ok(LoRaWanResponse::Idle) )
-                                            }
-                                        }
-
-                                    },
-                                    StringOrNum::S(s) => {
-                                        println!(
-                                        "\tWarning! UDP packet sent with \"immediate\"");
-                                        (lorawan, Ok(LoRaWanResponse::Idle) )
-
-                                    }
-                                }
-
-                            } else {
-                                (lorawan, Ok(LoRaWanResponse::Idle) )
-                            }
-                        } else {
-                            (lorawan, Ok(LoRaWanResponse::Idle) )
-
-                        }
+                    // udp_radio::Event::RadioReady(event) => {
+                    //     let time = radio.time.elapsed().as_millis();
+                    //     match &event.txpk.tmst {
+                    //         StringOrNum::N(n) => {
+                    //             if time < (n/1000 + 100).into() {
+                    //                 let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event));
+                    //                 lorawan.handle_event(&mut radio, event)
+                    //             } else {
+                    //                 (lorawan, Ok(LoRaWanResponse::Idle) )
+                    //             }
+                    //         }
+                    //         _ => (lorawan, Ok(LoRaWanResponse::Idle) )
+                    //     }
+                    // }
+                    udp_radio::Event::Rx(event) => {
+                        let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event.into()));
+                        lorawan.handle_event(&mut radio, event)
 
                     }
                     udp_radio::Event::Timeout => {
@@ -274,27 +232,28 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
                 match response {
                     Ok(response) => {
-                        print!("{} | {}] ", Utc::now().format("[%F %H:%M:%S%.3f "), radio.time.elapsed().as_millis());
 
                         match response {
                             LoRaWanResponse::TimeoutRequest(delay) => {
-                                println!("Timeout Request: {}", delay);
+                                debugln!("Timeout Request: {}", delay);
                                 radio.timer(delay).await;
                             }
                             LoRaWanResponse::NewSession => {
-                                println!("Join Success");
+                                debugln!("Join Success");
                                 // send packet
                                 lorawan_sender.send(udp_radio::Event::SendPacket).await?;
                             }
-                            LoRaWanResponse::Idle => println!("Idle"),
+                            LoRaWanResponse::Idle => {
+                                debugln!("Idle");
+                            },
                             LoRaWanResponse::DataDown | LoRaWanResponse::ReadyToSend |  LoRaWanResponse::NoAck => {
                                 lorawan_sender.send(udp_radio::Event::SendPacket).await?;
                             }
                             LoRaWanResponse::TxComplete => {
-                                println!("TxComplete");
+                                debugln!("TxComplete");
                             }
                             LoRaWanResponse::Rxing => {
-                                println!("Receiving");
+                                debugln!("Receiving");
                             }
                             _ => (),
                         }
