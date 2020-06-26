@@ -5,6 +5,9 @@ mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
 use udp_radio::UdpRadio;
+mod cli;
+use cli::*;
+mod config;
 
 use {
     lorawan_device::Device as LoRaWanDevice,
@@ -20,25 +23,6 @@ use {
     tokio::time::delay_for,
 };
 
-
-const DEVICES_PATH: &str = "lorawan-devices.json";
-mod config;
-#[derive(Debug, StructOpt)]
-#[structopt(name = "virtual-lorawan-device", about = "LoRaWAN test device utility")]
-struct Opt {
-    /// IP address and port of miner mirror port
-    /// (eg: 192.168.1.30:1681)
-    #[structopt(short, long, default_value = "127.0.0.1:1680")]
-    host: String,
-
-    /// Path to JSON devices file
-    #[structopt(short, long, default_value = DEVICES_PATH)]
-    device_file: String,
-
-    /// Run State Channel test
-    #[structopt(long)]
-    sc_test: bool,
-}
 
 static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
 
@@ -88,14 +72,9 @@ use std::str::FromStr;
 async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let config = config::load_config(&opt.device_file)?;
 
-    let devices = config.devices;//[0].clone();
+    let devices = config.devices;
 
-    if opt.sc_test && config.gateways.is_none() {
-        panic!("Running State Channel test without gateways in config file isn't useful");
-        // TODO: validate gateway fields
-    }
-
-    println!("Insantianting {} virtual devices", devices.len());
+    println!("Insantiating {} virtual devices", devices.len());
     for device in &devices {
         println!("{:?}", device);
     }
