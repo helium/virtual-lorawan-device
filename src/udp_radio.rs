@@ -3,8 +3,7 @@ use super::{udp_runtime, debugln, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use lorawan_device::{
-    radio, Event as LorawanEvent, State as LorawanState, Timings, Device as LorawanDevice, Response as LorawanResponse,
-session};
+    radio, Event as LorawanEvent, Timings, Device as LorawanDevice, Response as LorawanResponse};
 use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
 use tokio::sync::{broadcast, mpsc::{self, Receiver, Sender}};
 use std::time::Duration;
@@ -38,7 +37,6 @@ pub enum IntermediateEvent {
     NewSession,
     Timeout,
     SendPacket,
-    Shutdown,
 }
 
 impl Settings {
@@ -116,9 +114,6 @@ pub async fn run_loop(
                     debugln!("Dispatchimg Timeout");
                     lorawan.handle_event( LorawanEvent::Timeout)
                 }
-                IntermediateEvent::Shutdown => {
-                    return Ok(());
-                }
             };
 
             lorawan = new_state;
@@ -174,7 +169,7 @@ pub async fn run_loop(
                         _ => (),
                     }
                 },
-                Err(e) => {
+                Err(_) => {
 
                     //panic!("LoRaWAN Stack Error");
                 }
@@ -211,7 +206,7 @@ impl UdpRadioRuntime {
                                     );
                         }
                     },
-                    StringOrNum::S(s) => {
+                    StringOrNum::S(_) => {
                         debugln!(
                                 "\tWarning! UDP packet sent with \"immediate\"");
                     }
@@ -285,44 +280,6 @@ impl UdpRadio {
         self.window_start = delay;
     }
 
-    fn send(&mut self, buffer: &mut [u8]) -> bool {
-        let size = buffer.len() as u64;
-        let data = base64::encode(buffer);
-        let tmst = self.time.elapsed().as_micros() as u64;
-
-        let mut packet = Vec::new();
-        packet.push({
-            RxPk {
-                chan: 0,
-                codr: self.settings.get_codr(),
-                data,
-                datr: self.settings.get_datr(),
-                freq: self.settings.get_freq(),
-                lsnr: 5.5,
-                modu: "LORA".to_string(),
-                rfch: 0,
-                rssi: -112,
-                size,
-                stat: 1,
-                tmst,
-            }
-        });
-        let rxpk = Some(packet);
-
-        let packet =
-            semtech_udp::Packet::from_data(PacketData::PushData(PushData { rxpk, stat: None }));
-
-        if let Err(e) = self.sender.try_send(packet) {
-            panic!("UdpTx Queue Overflow! {}", e)
-        }
-
-        // returning false indicates that we are not "busy" sending
-        false
-    }
-
-    fn configure_rx(&mut self, config: radio::RfConfig) {
-        self.settings.rfconfig = config;
-    }
 }
 
 pub enum Error {}
@@ -377,7 +334,10 @@ impl radio::PhyRxTx for UdpRadio {
 
                 Ok(radio::Response::TxDone(self.time.elapsed().as_millis() as u32))
             }
-            radio::Event::RxRequest(RfConfig) => Ok(radio::Response::Idle),
+            radio::Event::RxRequest(config) => {
+                self.settings.rfconfig = config;
+                Ok(radio::Response::Idle)
+            },
             radio::Event::CancelRx => Ok(radio::Response::Idle),
             radio::Event::PhyEvent(udp_event) => {
                 match udp_event {

@@ -5,8 +5,7 @@ mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
 use lorawan_device::{
-    radio, Device as LoRaWanDevice, Event as LoRaWanEvent, Response as LoRaWanResponse,
-    State as LoRaWanState,
+    Device as LoRaWanDevice,
 };
 use rand::Rng;
 use std::process;
@@ -15,10 +14,7 @@ use std::time::Duration;
 use std::{thread, time};
 use structopt::StructOpt;
 use tokio::time::delay_for;
-use udp_radio::{UdpRadio, IntermediateEvent};
-use semtech_udp::StringOrNum;
-mod state_channels;
-use state_channels::*;
+use udp_radio::UdpRadio;
 
 const DEVICES_PATH: &str = "lorawan-devices.json";
 mod config;
@@ -32,7 +28,7 @@ struct Opt {
 
     /// Path to JSON devices file
     #[structopt(short, long, default_value = DEVICES_PATH)]
-    console: String,
+    device_file: String,
 
     /// Run State Channel test
     #[structopt(long)]
@@ -88,7 +84,7 @@ lazy_static! {
 
 use std::str::FromStr;
 async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
-    let config = config::load_config(DEVICES_PATH)?;
+    let config = config::load_config(&opt.device_file)?;
 
     let devices = config.devices;//[0].clone();
 
@@ -137,7 +133,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     for device in devices {
         // UdpRadio implements the LoRaWAN device Radio trait
         // use it by sending requested via the lorawan_sender
-        let (mut lorawan_receiver, mut radio_runtime, mut lorawan_sender, mut radio) =
+        let (lorawan_receiver, mut radio_runtime, lorawan_sender, radio) =
             UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), INSTANT.clone());
 
         tokio::spawn(async move {

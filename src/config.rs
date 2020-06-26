@@ -45,9 +45,6 @@ impl Device {
     pub fn transmit_delay(&self) -> u64 {
         self.transmit_delay as u64
     }
-    pub fn oui(&self) -> usize {
-        self.oui as usize
-    }
 }
 
 #[derive(Deserialize, Serialize)]
