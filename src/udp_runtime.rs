@@ -6,7 +6,7 @@
 use std::net::SocketAddr;
 use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::{broadcast, mpsc::{self, Receiver, Sender}};
 use semtech_udp::PacketData;
 
 pub type RxMessage = semtech_udp::Packet;
@@ -76,7 +76,7 @@ impl UdpRuntime {
         // "connecting" filters for only frames from the server
         socket.connect(host).await?;
         socket.send(&[0]).await?;
-        let (rx_sender, rx_receiver) = mpsc::channel(100);
+        let (rx_sender, rx_receiver) = broadcast::channel(16);
         let (tx_sender, tx_receiver) = mpsc::channel(100);
 
         let tx_sender_clone = tx_sender.clone();

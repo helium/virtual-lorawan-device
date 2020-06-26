@@ -2,7 +2,7 @@
 use super::{udp_runtime, debugln, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
-use lorawan_device::{radio::*, Event as LorawanEvent, State as LorawanState, Timings};
+use lorawan_device::{radio, Event as LorawanEvent, State as LorawanState, Timings, Device as LorawanDevice, Response as LorawanResponse};
 use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
@@ -11,32 +11,32 @@ use tokio::time::delay_for;
 #[derive(Debug)]
 #[allow(dead_code)]
 #[allow(clippy::large_enum_variant)]
-pub enum RadioEvent {
+pub enum Event {
     Rx(semtech_udp::PullResp),
-    TxDone,
 }
 
-impl From<semtech_udp::PullResp> for  RadioEvent{
+impl<'a> From<semtech_udp::PullResp> for  Event {
     fn from(rx: semtech_udp::PullResp) -> Self {
-        RadioEvent::Rx(rx)
+        Event::Rx(rx)
+    }
+}
+
+impl<'a> From<semtech_udp::PullResp> for  IntermediateEvent {
+    fn from(rx: semtech_udp::PullResp) -> Self {
+        IntermediateEvent::Rx(rx)
     }
 }
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum Event {
+// I need some intermediate event because of Lifetimes
+// maybe there's a cleaner way of doing this
+pub enum IntermediateEvent {
     Rx(semtech_udp::PullResp),
-    CreateSession,
+    NewSession,
     Timeout,
     SendPacket,
     Shutdown,
-    TxDone
-}
-
-impl From<semtech_udp::PullResp> for  Event{
-    fn from(rx: semtech_udp::PullResp) -> Self {
-        Event::Rx(rx)
-    }
 }
 
 impl Settings {
@@ -44,27 +44,27 @@ impl Settings {
         format!(
             "{}{}",
             match self.rfconfig.spreading_factor {
-                SpreadingFactor::_7 => "SF7",
-                SpreadingFactor::_8 => "SF8",
-                SpreadingFactor::_9 => "SF9",
-                SpreadingFactor::_10 => "SF10",
-                SpreadingFactor::_11 => "SF11",
-                SpreadingFactor::_12 => "SF12",
+                radio::SpreadingFactor::_7 => "SF7",
+                radio::SpreadingFactor::_8 => "SF8",
+                radio::SpreadingFactor::_9 => "SF9",
+                radio::SpreadingFactor::_10 => "SF10",
+                radio::SpreadingFactor::_11 => "SF11",
+                radio::SpreadingFactor::_12 => "SF12",
             },
             match self.rfconfig.bandwidth {
-                Bandwidth::_125KHZ => "BW125",
-                Bandwidth::_250KHZ => "BW250",
-                Bandwidth::_500KHZ => "BW500",
+                radio::Bandwidth::_125KHZ => "BW125",
+                radio::Bandwidth::_250KHZ => "BW250",
+                radio::Bandwidth::_500KHZ => "BW500",
             }
         )
     }
 
     fn get_codr(&self) -> String {
         match self.rfconfig.coding_rate {
-            CodingRate::_4_5 => "4/5",
-            CodingRate::_4_6 => "4/6",
-            CodingRate::_4_7 => "4/7",
-            CodingRate::_4_8 => "4/8",
+            radio::CodingRate::_4_5 => "4/5",
+            radio::CodingRate::_4_6 => "4/6",
+            radio::CodingRate::_4_7 => "4/7",
+            radio::CodingRate::_4_8 => "4/8",
         }
         .to_string()
     }
@@ -77,17 +77,119 @@ impl Settings {
 // Runtime translates UDP events into Device events
 pub struct UdpRadioRuntime {
     receiver: Receiver<udp_runtime::RxMessage>,
-    lorawan_sender: Sender<Event>,
+    lorawan_sender: Sender<IntermediateEvent>,
     time: Instant
+}
+
+pub async fn run_loop(
+    lorawan_receiver: Receiver<IntermediateEvent>,
+    lorawan_sender: Sender<IntermediateEvent>,
+    lorawan: LorawanDevice<UdpRadio>,
+    transmit_delay: u64) -> Result<(), Box<dyn std::error::Error>> {
+    lorawan_sender
+        .try_send(IntermediateEvent::NewSession)
+        .unwrap();
+
+    // // initialize as 1 to account for the join
+    let mut sent_packets: usize = 1;
+    loop {
+        if let Some(event) = lorawan_receiver.recv().await {
+            let (new_state, response) = match event {
+                IntermediateEvent::NewSession => {
+                    debugln!("Creating Session");
+                    let event = LorawanEvent::NewSession;
+                    lorawan.handle_event(event)
+                }
+                IntermediateEvent::SendPacket => {
+                    debugln!("Sending DataUp");
+                    let data = [12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 6];
+                    lorawan.send(&data, 2, true)
+                }
+                IntermediateEvent::Rx(event) => {
+                    debugln!("Dispatching RxPacket");
+                    lorawan.handle_event(LorawanEvent::RadioEvent(
+                        radio::Event::PhyEvent(event.into())
+                    )
+                    )
+                }
+                IntermediateEvent::Timeout => {
+                    debugln!("Dispatchimg Timeout");
+                    lorawan.handle_event( LorawanEvent::Timeout)
+                }
+                IntermediateEvent::Shutdown => {
+                    return Ok(());
+                }
+            };
+
+            lorawan = new_state;
+
+            match response {
+                Ok(response) => {
+
+                    match response {
+                        LorawanResponse::TimeoutRequest(delay) => {
+                            lorawan.get_radio().timer(delay).await;
+                        }
+                        LorawanResponse::NewSession => {
+                            debugln!("Join Success");
+                            let mut sender = lorawan_sender.clone();
+                            tokio::spawn(async move {
+                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                            });
+                        }
+                        LorawanResponse::Idle => {
+                            debugln!("Idle");
+                        }
+                        LorawanResponse::NoAck => {
+                            debugln!("NoAck");
+                            let mut sender = lorawan_sender.clone();
+                            tokio::spawn(async move {
+                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                            });
+                        }
+                        LorawanResponse::ReadyToSend => {
+                            debugln!("No downlink received but none expected - ready to send again");
+                            let mut sender = lorawan_sender.clone();
+                            tokio::spawn(async move {
+                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                            });
+                        }
+                        LorawanResponse::DataDown => {
+                            debugln!("Received downlink or ACK");
+                            let mut sender = lorawan_sender.clone();
+                            tokio::spawn(async move {
+                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                            });
+                        }
+                        LorawanResponse::TxComplete => {
+                            debugln!("TxComplete");
+                        }
+                        LorawanResponse::Rxing => {
+                            debugln!("Receiving");
+                        }
+                        _ => (),
+                    }
+                },
+                Err(e) => {
+                    panic!("LoRaWAN Stack Error");
+                }
+            }
+        }
+    }
+
 }
 
 impl UdpRadioRuntime {
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             if let Some(event) = self.receiver.recv().await {
+
                 if let semtech_udp::PacketData::PullResp(data) = event.data {
                     let mut sender = self.lorawan_sender.clone();
-
                     match &data.txpk.tmst {
                         StringOrNum::N(n) => {
                             let scheduled_time = n/1000;
@@ -95,6 +197,7 @@ impl UdpRadioRuntime {
                             if scheduled_time > time  {
                                 // make units the same
                                 let delay = scheduled_time - time as u64;
+                                // dispatch the receive event only once its been received
                                 tokio::spawn(async move {
                                     delay_for(Duration::from_millis(delay + 50 )).await;
                                     sender.send(data.into()).await.unwrap();
@@ -122,12 +225,18 @@ use std::time::Instant;
 
 #[derive(Default)]
 struct Settings {
-    rfconfig: RfConfig,
+    rfconfig: radio::RfConfig,
+}
+
+impl From<radio::TxConfig> for Settings {
+    fn from(txconfig: radio::TxConfig) -> Settings {
+        Settings { rfconfig: txconfig.rf }
+    }
 }
 
 pub struct UdpRadio {
     sender: Sender<udp_runtime::TxMessage>,
-    lorawan_sender: Sender<Event>,
+    lorawan_sender: Sender<IntermediateEvent>,
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
     pub time: Instant,
@@ -135,11 +244,11 @@ pub struct UdpRadio {
 }
 
 impl UdpRadio {
-    pub fn new(
+    pub fn new<'a>(
         sender: Sender<udp_runtime::TxMessage>,
         receiver: Receiver<udp_runtime::RxMessage>,
         time: Instant,
-    ) -> (Receiver<Event>, UdpRadioRuntime, Sender<Event>, UdpRadio) {
+    ) -> (Receiver<IntermediateEvent>, UdpRadioRuntime, Sender<IntermediateEvent>, UdpRadio) {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
         let lorawan_sender_clone = lorawan_sender.clone();
         let lorawan_sender_another_clone = lorawan_sender.clone();
@@ -157,7 +266,7 @@ impl UdpRadio {
                 lorawan_sender: lorawan_sender_clone,
                 rx_buffer: HVec::new(),
                 settings: Settings {
-                    rfconfig: RfConfig::default(),
+                    rfconfig: radio::RfConfig::default(),
                 },
                 time,
                 window_start: 0,
@@ -171,16 +280,12 @@ impl UdpRadio {
 
         tokio::spawn(async move {
             delay_for(Duration::from_millis(delay as u64)).await;
-            sender.send(Event::Timeout).await.unwrap();
+            sender.send(IntermediateEvent::Timeout).await.unwrap();
         });
         self.window_start = delay;
     }
-}
 
-impl PhyRxTx for UdpRadio {
-    type PhyEvent = RadioEvent;
-
-    fn send(&mut self, buffer: &mut [u8]) {
+    fn send(&mut self, buffer: &mut [u8]) -> bool {
         let size = buffer.len() as u64;
         let data = base64::encode(buffer);
         let tmst = self.time.elapsed().as_micros() as u64;
@@ -211,49 +316,88 @@ impl PhyRxTx for UdpRadio {
             panic!("UdpTx Queue Overflow! {}", e)
         }
 
-        // sending the packet pack to ourselves simulates a SX12xx DI0 interrupt
-        if let Err(e) = self
-            .lorawan_sender
-            .try_send(Event::TxDone)
-        {
-            panic!("LoRaWAN Queue Overflow! {}", e)
-        }
+        // returning false indicates that we are not "busy" sending
+        false
+    }
+
+    fn configure_rx(&mut self, config: radio::RfConfig) {
+        self.settings.rfconfig = config;
+    }
+}
+
+pub enum Error {}
+pub enum Response {}
+
+impl radio::PhyRxTx for UdpRadio {
+    type PhyError = Error;
+    type PhyResponse = Response;
+    type PhyEvent = Event;
+    fn get_mut_radio(&mut self) -> &mut Self {
+        self
     }
 
     fn get_received_packet(&mut self) -> &mut HVec<u8, U256> {
         &mut self.rx_buffer
     }
 
-    fn configure_tx(&mut self, config: TxConfig) {
-        self.settings.rfconfig = config.rf;
-    }
-
-    fn configure_rx(&mut self, config: RfConfig) {
-        self.settings.rfconfig = config;
-    }
-
-    fn set_rx(&mut self) {
-        // normaly, this would configure the radio,
-        // but the UDP port is always running concurrently
-    }
-
-    fn handle_phy_event(&mut self, event: RadioEvent) -> Option<PhyResponse> {
+    fn handle_event(&mut self, event: radio::Event<UdpRadio>) -> Result<radio::Response<UdpRadio>, radio::Error<UdpRadio>> {
         match event {
-            RadioEvent::TxDone => Some(PhyResponse::TxDone(self.time.elapsed().as_millis() as u32)),
-            RadioEvent::Rx(pkt) =>
-                match base64::decode(pkt.txpk.data) {
-                    Ok(data) => {
-                        self.rx_buffer.clear();
-                        for el in data {
-                            if let Err(e) = self.rx_buffer.push(el) {
-                                panic!("Error pushing data into rx_buffer {}", e);
-                            }
-                        }
-                        Some(PhyResponse::RxDone(RxQuality::new(-115, 4)))
+            radio::Event::TxRequest(tx_config, buffer) => {
+                let size = buffer.len() as u64;
+                let data = base64::encode(buffer);
+                let tmst = self.time.elapsed().as_micros() as u64;
+
+                let settings = Settings::from(tx_config);
+
+                let mut packet = Vec::new();
+                packet.push({
+                    RxPk {
+                        chan: 0,
+                        codr: settings.get_codr(),
+                        data,
+                        datr: settings.get_datr(),
+                        freq: settings.get_freq(),
+                        lsnr: 5.5,
+                        modu: "LORA".to_string(),
+                        rfch: 0,
+                        rssi: -112,
+                        size,
+                        stat: 1,
+                        tmst,
                     }
-                    Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
+                });
+                let rxpk = Some(packet);
+
+                let packet =
+                    semtech_udp::Packet::from_data(PacketData::PushData(PushData { rxpk, stat: None }));
+
+                if let Err(e) = self.sender.try_send(packet) {
+                    panic!("UdpTx Queue Overflow! {}", e)
                 }
-         }
+
+                Ok(radio::Response::TxDone(self.time.elapsed().as_millis() as u32))
+            }
+            radio::Event::RxRequest(RfConfig) => Ok(radio::Response::Idle),
+            radio::Event::CancelRx => Ok(radio::Response::Idle),
+            radio::Event::PhyEvent(udp_event) => {
+                match udp_event {
+                    Event::Rx(pkt) => {
+                        match base64::decode(pkt.txpk.data) {
+                            Ok(data) => {
+                                self.rx_buffer.clear();
+                                for el in data {
+                                    if let Err(e) = self.rx_buffer.push(el) {
+                                        panic!("Error pushing data into rx_buffer {}", e);
+                                    }
+                                }
+                                Ok(radio::Response::RxDone(radio::RxQuality::new(-115, 4)))
+                            }
+                            Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
+                        }
+                    }
+                }
+            },
+        }
     }
 }
 

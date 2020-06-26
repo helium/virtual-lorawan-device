@@ -15,7 +15,7 @@ use std::time::Duration;
 use std::{thread, time};
 use structopt::StructOpt;
 use tokio::time::delay_for;
-use udp_radio::{UdpRadio, RadioEvent};
+use udp_radio::{UdpRadio, IntermediateEvent};
 use semtech_udp::StringOrNum;
 mod state_channels;
 use state_channels::*;
@@ -90,17 +90,18 @@ use std::str::FromStr;
 async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let config = config::load_config(DEVICES_PATH)?;
 
-    let device = config.devices[0].clone();
+    let devices = config.devices;//[0].clone();
 
     if opt.sc_test && config.gateways.is_none() {
         panic!("Running State Channel test without gateways in config file isn't useful");
         // TODO: validate gateway fields
     }
 
-    println!("Virtual device utility only supports one device for now");
-    println!("{:#?}", device);
+    println!("Insantianting {} virtual devices", devices.len());
+    for device in &devices {
+        println!("{:?}", device);
+    }
 
-    let oui = device.oui();
     unsafe {
         RANDOM = Some(Mutex::new(Vec::new()));
     }
@@ -124,174 +125,40 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     // the delay gives the random number generator get started
     delay_for(Duration::from_millis(50)).await;
 
-    let my_address = SocketAddr::from(([0, 0, 0, 0], 1686));
+    let my_address = SocketAddr::from(([0, 0, 0, 0], 1687));
     let host = SocketAddr::from_str(opt.host.as_str())?;
 
     let (receiver, sender, udp_runtime) = UdpRuntime::new(my_address, host).await?;
+
+
 
     tokio::spawn(async move {
         udp_runtime.run().await.unwrap();
     });
 
-    // UdpRadio implements the LoRaWAN device Radio trait
-    // use it by sending requested via the lorawan_sender
-    let (mut lorawan_receiver, mut radio_runtime, mut lorawan_sender, mut radio) =
-        UdpRadio::new(sender, receiver, INSTANT.clone());
+    for device in devices {
+        // UdpRadio implements the LoRaWAN device Radio trait
+        // use it by sending requested via the lorawan_sender
+        let (mut lorawan_receiver, mut radio_runtime, mut lorawan_sender, mut radio) =
+            UdpRadio::new(sender.clone(), receiver, INSTANT.clone());
 
-    tokio::spawn(async move {
-        radio_runtime.run().await.unwrap();
-    });
+        tokio::spawn(async move {
+            radio_runtime.run().await.unwrap();
+        });
 
-    loop {
         let transmit_delay = device.transmit_delay();
-        let mut lorawan = LoRaWanDevice::new(
+        let lorawan = LoRaWanDevice::new(
+            radio,
             device.credentials().deveui_cloned_into_buf()?,
             device.credentials().appeui_cloned_into_buf()?,
             device.credentials().appkey_cloned_into_buf()?,
             get_random_u32,
         );
 
-        let open = if opt.sc_test {
-            let mut open = fetch_open_channel(oui).await?;
-            println!("{:#?}", open);
-            let mut remaining_blocks = open.remaining_blocks().await?.1;
-            println!("Expires in {}", remaining_blocks);
-
-            // if it is closing soon, just wait for this one to close
-            if remaining_blocks < 3 {
-                open.block_until_closed_transaction(oui).await.unwrap();
-                open = fetch_open_channel(oui).await?;
-                println!("{:#?}", open);
-                remaining_blocks = open.remaining_blocks().await?.1;
-                println!("Expires in {}", remaining_blocks);
-            }
-
-            let sender_clone = lorawan_sender.clone();
-            let threshold = open.close_height() as isize - 3;
-            // tokio::spawn(async move {
-            //     signal_at_block_height(threshold, sender_clone)
-            //         .await
-            //         .unwrap();
-            // });
-            Some(open)
-        } else {
-            None
-        };
-
-        lorawan_sender
-            .try_send(udp_radio::Event::CreateSession)
-            .unwrap();
-
-        // initialize as 1 to account for the join
-        let mut sent_packets: usize = 1;
-        loop {
-            if let Some(event) = lorawan_receiver.recv().await {
-                let (new_state, response) = match event {
-                    udp_radio::Event::CreateSession => {
-                        debugln!("Creating Session");
-                        let event = LoRaWanEvent::NewSession;
-                        lorawan.handle_event(&mut radio, event)
-                    }
-                    udp_radio::Event::TxDone => {
-                        let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(RadioEvent::TxDone));
-                        lorawan.handle_event(&mut radio, event)
-                    }
-                    udp_radio::Event::SendPacket => {
-                        debugln!("Sending DataUp");
-                        let data = [12, 3, 4, 5];
-                        lorawan.send(&mut radio, &data, 2, true)
-                    }
-                    udp_radio::Event::Rx(event) => {
-                        debugln!("Dispatching RxPacket");
-                        let event = LoRaWanEvent::RadioEvent(radio::Event::PhyEvent(event.into()));
-                        lorawan.handle_event(&mut radio, event)
-                    }
-                    udp_radio::Event::Timeout => {
-                        debugln!("Dispatchimg Timeout");
-                        lorawan.handle_event(&mut radio, LoRaWanEvent::Timeout)
-                    }
-                    udp_radio::Event::Shutdown => {
-                        break;
-                    }
-                };
-
-                lorawan = new_state;
-
-                match response {
-                    Ok(response) => {
-
-                        match response {
-                            LoRaWanResponse::TimeoutRequest(delay) => {
-                                radio.timer(delay).await;
-                            }
-                            LoRaWanResponse::NewSession => {
-                                debugln!("Join Success");
-                                let mut sender = lorawan_sender.clone();
-                                tokio::spawn(async move {
-                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
-                                });
-                            }
-                            LoRaWanResponse::Idle => {
-                                debugln!("Idle");
-                            }
-                            LoRaWanResponse::NoAck => {
-                                debugln!("NoAck");
-                                let mut sender = lorawan_sender.clone();
-                                tokio::spawn(async move {
-                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
-                                });
-                            }
-                            LoRaWanResponse::ReadyToSend => {
-                                debugln!("No downlink received but none expected - ready to send again");
-                                let mut sender = lorawan_sender.clone();
-                                tokio::spawn(async move {
-                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
-                                });
-                            }
-                            LoRaWanResponse::DataDown => {
-                                debugln!("Received downlink or ACK");
-                                let mut sender = lorawan_sender.clone();
-                                tokio::spawn(async move {
-                                    delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                    sender.send(udp_radio::Event::SendPacket).await.unwrap();
-                                });
-                            }
-                            LoRaWanResponse::TxComplete => {
-                                debugln!("TxComplete");
-                            }
-                            LoRaWanResponse::Rxing => {
-                                debugln!("Receiving");
-                            }
-                            _ => (),
-                        }
-                    },
-                    Err(e) => {
-                        panic!("LoRaWAN Stack Error");
-                    }
-                }
-            }
-        }
-
-        if let Some(open) = open {
-            println!("Stopped sending packets. Waiting for close transaction");
-            if let Some(gateways) = &config.gateways {
-                let closed = open.block_until_closed_transaction(oui).await.unwrap();
-
-                for summary in closed.summaries() {
-                    for gateway in gateways {
-                        if summary.client().as_str() == gateway {
-                            println!("{:?}", summary);
-                        }
-                    }
-                }
-            }
-        }
-        println!("Packets sent by device: {}", sent_packets);
-
-        // drain the receiver before looping
-        while lorawan_receiver.try_recv().is_ok() {}
+        tokio::spawn(async move {
+            udp_radio::run_loop(lorawan_receiver, lorawan_sender, lorawan, transmit_delay).await.unwrap();
+        });
     }
+
+    loop {}
 }
