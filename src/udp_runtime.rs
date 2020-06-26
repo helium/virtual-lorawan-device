@@ -3,11 +3,14 @@
    run sending and receiving concurrently as tasks,
    receive downlink packets and send uplink packets easily
 */
+use semtech_udp::PacketData;
 use std::net::SocketAddr;
 use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
-use tokio::sync::{broadcast, mpsc::{self, Receiver, Sender}};
-use semtech_udp::PacketData;
+use tokio::sync::{
+    broadcast,
+    mpsc::{self, Receiver, Sender},
+};
 
 pub type RxMessage = semtech_udp::Packet;
 pub type TxMessage = semtech_udp::Packet;
@@ -79,8 +82,7 @@ impl UdpRuntime {
     pub async fn new(
         local: SocketAddr,
         host: SocketAddr,
-    ) -> Result<UdpRuntime, Box<dyn std::error::Error>>
-    {
+    ) -> Result<UdpRuntime, Box<dyn std::error::Error>> {
         let mut socket = UdpSocket::bind(&local).await?;
         // "connecting" filters for only frames from the server
         socket.connect(host).await?;
@@ -90,20 +92,18 @@ impl UdpRuntime {
 
         let tx_sender_clone = tx_sender.clone();
         let (socket_recv, socket_send) = socket.split();
-        Ok(
-            UdpRuntime {
-                rx: UdpRuntimeRx {
-                    sender: rx_sender,
-                    socket_recv,
-                },
-                tx: UdpRuntimeTx {
-                    receiver: tx_receiver,
-                    sender: tx_sender,
-                    socket_send,
-                },
-                poll_sender: tx_sender_clone,
+        Ok(UdpRuntime {
+            rx: UdpRuntimeRx {
+                sender: rx_sender,
+                socket_recv,
             },
-        )
+            tx: UdpRuntimeTx {
+                receiver: tx_receiver,
+                sender: tx_sender,
+                socket_send,
+            },
+            poll_sender: tx_sender_clone,
+        })
     }
 }
 
@@ -121,7 +121,6 @@ impl UdpRuntimeRx {
                         PacketData::PullAck | PacketData::PushAck => 0,
                         _ => self.sender.send(packet).unwrap(),
                     };
-
                 }
                 Err(e) => return Err(e.into()),
             }
