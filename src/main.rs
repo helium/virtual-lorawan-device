@@ -72,39 +72,34 @@ const CONSOLE_CREDENTIALS_PATH: &str = "console-credentials.json";
 
 async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let devices = if let Some(cmd) = opt.command {
-        if let Command::Console { max_devices, cmd } = cmd {
-            let clients = config::load_console_client(CONSOLE_CREDENTIALS_PATH)?;
-
-            let (oui, client) = match cmd {
-                Console::Production {} => {
-                    if let Some(client) = clients.production {
-                        (1, client)
-                    } else {
-                        panic!("No credentials for production Console")
-                    }
-                }
-                Console::Staging {} => {
-                    if let Some(client) = clients.staging {
-                        (2, client)
-                    } else {
-                        panic!("No credentials for staging Console")
-                    }
-                }
-            };
-
-            let console_devices = client.get_devices().await?;
-            let mut devices = Vec::new();
-            for console_device in console_devices {
-                devices.push(config::Device::from_console_device(oui, console_device));
-                if devices.len() == max_devices {
-                    break;
+        let Command::Console { max_devices, cmd } = cmd;
+        let clients = config::load_console_client(CONSOLE_CREDENTIALS_PATH)?;
+        let (oui, client) = match cmd {
+            Console::Production {} => {
+                if let Some(client) = clients.production {
+                    (1, client)
+                } else {
+                    panic!("No credentials for production Console")
                 }
             }
-            devices
-        } else {
-            panic!("Foo")
-        }
+            Console::Staging {} => {
+                if let Some(client) = clients.staging {
+                    (2, client)
+                } else {
+                    panic!("No credentials for staging Console")
+                }
+            }
+        };
 
+        let console_devices = client.get_devices().await?;
+        let mut devices = Vec::new();
+        for console_device in console_devices {
+            devices.push(config::Device::from_console_device(oui, console_device));
+            if devices.len() == max_devices {
+                break;
+            }
+        }
+        devices
     } else {
         let config = config::load_config(&opt.device_file)?;
         config.devices

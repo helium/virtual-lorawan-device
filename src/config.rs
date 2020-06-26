@@ -106,7 +106,7 @@ pub fn load_console_client(path: &str) -> Result<ConsoleClients, Box<dyn std::er
     Ok(ConsoleClients {
         staging: if let Some(key) = creds.staging {
             key_verify(&key)?;
-            Some(console::client::Client::new(console::client::Config::new(key))?)
+            Some(console::client::Client::new(console::client::Config::new_with_url(key, "https://staging-console.helium.com"))?)
         } else { None },
         production: if let Some(key) = creds.production {
             key_verify(&key)?;

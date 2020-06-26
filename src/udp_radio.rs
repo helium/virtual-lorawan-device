@@ -85,6 +85,14 @@ pub struct UdpRadioRuntime {
     time: Instant,
 }
 
+pub fn pretty_device(creds: &lorawan_device::Credentials) -> String {
+    let mut bytes: Vec<u8> = Vec::new();
+    bytes.extend(creds.deveui());
+    bytes.reverse();
+    let hex = hex::encode(&bytes);
+    hex.to_uppercase()[12..].to_string()
+}
+
 pub async fn run_loop(
     mut lorawan_receiver: Receiver<IntermediateEvent>,
     mut lorawan_sender: Sender<IntermediateEvent>,
@@ -96,15 +104,16 @@ pub async fn run_loop(
         .unwrap();
 
     loop {
+        let device_ref = pretty_device(lorawan.get_credentials());
         if let Some(event) = lorawan_receiver.recv().await {
             let (new_state, response) = match event {
                 IntermediateEvent::NewSession => {
-                    debugln!("Creating Session");
+                    debugln!("{}: Creating Session", device_ref);
                     let event = LorawanEvent::NewSession;
                     lorawan.handle_event(event)
                 }
                 IntermediateEvent::SendPacket => {
-                    debugln!("Sending DataUp");
+                    debugln!("{}: Sending DataUp", device_ref);
                     let data = [
                         12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4,
                         5, 6,
@@ -112,13 +121,11 @@ pub async fn run_loop(
                     lorawan.send(&data, 2, true)
                 }
                 IntermediateEvent::Rx(event) => {
-                    debugln!("Dispatching RxPacket");
                     lorawan.handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(
                         event.into(),
                     )))
                 }
                 IntermediateEvent::Timeout => {
-                    debugln!("Dispatchimg Timeout");
                     lorawan.handle_event(LorawanEvent::Timeout)
                 }
             };
@@ -131,7 +138,7 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NewSession => {
-                        debugln!("Join Success");
+                        debugln!("{}: Join Success", device_ref);
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
@@ -139,10 +146,10 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::Idle => {
-                        debugln!("Idle");
+                        debugln!("{}: Idle", device_ref);
                     }
                     LorawanResponse::NoAck => {
-                        debugln!("NoAck");
+                        debugln!("{}: NoAck", device_ref);
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
@@ -150,7 +157,7 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::ReadyToSend => {
-                        debugln!("No downlink received but none expected - ready to send again");
+                        debugln!("{}: No downlink received but none expected - ready to send again", device_ref);
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
@@ -158,7 +165,7 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::DataDown => {
-                        debugln!("Received downlink or ACK");
+                        debugln!("{}: Received downlink or ACK", device_ref);
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
@@ -166,10 +173,10 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::TxComplete => {
-                        debugln!("TxComplete");
+                        debugln!("{}: TxComplete", device_ref);
                     }
                     LorawanResponse::Rxing => {
-                        debugln!("Receiving");
+                        debugln!("{}: Receiving", device_ref);
                     }
                     _ => (),
                 },
