@@ -120,14 +120,10 @@ pub async fn run_loop(
                     ];
                     lorawan.send(&data, 2, true)
                 }
-                IntermediateEvent::Rx(event) => {
-                    lorawan.handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(
-                        event.into(),
-                    )))
-                }
-                IntermediateEvent::Timeout => {
-                    lorawan.handle_event(LorawanEvent::Timeout)
-                }
+                IntermediateEvent::Rx(event) => lorawan.handle_event(LorawanEvent::RadioEvent(
+                    radio::Event::PhyEvent(event.into()),
+                )),
+                IntermediateEvent::Timeout => lorawan.handle_event(LorawanEvent::Timeout),
             };
 
             lorawan = new_state;
@@ -157,7 +153,10 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::ReadyToSend => {
-                        debugln!("{}: No downlink received but none expected - ready to send again", device_ref);
+                        debugln!(
+                            "{}: No downlink received but none expected - ready to send again",
+                            device_ref
+                        );
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;

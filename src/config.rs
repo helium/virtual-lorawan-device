@@ -1,7 +1,7 @@
+use helium_console as console;
 use serde_derive::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use helium_console as console;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Credentials {
@@ -39,8 +39,7 @@ pub struct Device {
     credentials: Credentials,
 }
 impl Device {
-
-    pub fn from_console_device(oui: usize,device: console::Device) -> Device {
+    pub fn from_console_device(oui: usize, device: console::Device) -> Device {
         Device {
             transmit_delay: 0,
             oui,
@@ -48,7 +47,7 @@ impl Device {
                 app_eui: device.app_eui().to_string(),
                 app_key: device.app_key().to_string(),
                 dev_eui: device.dev_eui().to_string(),
-            }
+            },
         }
     }
     pub fn credentials(&self) -> &Credentials {
@@ -94,7 +93,6 @@ fn key_verify(key: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 pub fn load_console_client(path: &str) -> Result<ConsoleClients, Box<dyn std::error::Error>> {
     if !Path::new(path).exists() {
         panic!("No {} found", path);
@@ -106,11 +104,19 @@ pub fn load_console_client(path: &str) -> Result<ConsoleClients, Box<dyn std::er
     Ok(ConsoleClients {
         staging: if let Some(key) = creds.staging {
             key_verify(&key)?;
-            Some(console::client::Client::new(console::client::Config::new_with_url(key, "https://staging-console.helium.com"))?)
-        } else { None },
+            Some(console::client::Client::new(
+                console::client::Config::new_with_url(key, "https://staging-console.helium.com"),
+            )?)
+        } else {
+            None
+        },
         production: if let Some(key) = creds.production {
             key_verify(&key)?;
-            Some(console::client::Client::new(console::client::Config::new(key))?)
-        } else { None }
+            Some(console::client::Client::new(console::client::Config::new(
+                key,
+            ))?)
+        } else {
+            None
+        },
     })
 }
