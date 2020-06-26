@@ -12,17 +12,17 @@ mod config;
 use {
     lorawan_device::Device as LoRaWanDevice,
     rand::Rng,
-    structopt::StructOpt,
     std::{
         net::SocketAddr,
         process,
+        str::FromStr,
         sync::Mutex,
+        thread,
         time::{self, Duration, Instant},
-        thread
     },
+    structopt::StructOpt,
     tokio::time::delay_for,
 };
-
 
 static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
 
@@ -68,13 +68,49 @@ lazy_static! {
     static ref INSTANT: Instant = Instant::now();
 }
 
-use std::str::FromStr;
+const CONSOLE_CREDENTIALS_PATH: &str = "console-credentials.json";
+
 async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
-    let config = config::load_config(&opt.device_file)?;
+    let devices = if let Some(cmd) = opt.command {
+        if let Command::Console { max_devices, cmd } = cmd {
+            let clients = config::load_console_client(CONSOLE_CREDENTIALS_PATH)?;
 
-    let devices = config.devices;
+            let (oui, client) = match cmd {
+                Console::Production {} => {
+                    if let Some(client) = clients.production {
+                        (1, client)
+                    } else {
+                        panic!("No credentials for production Console")
+                    }
+                }
+                Console::Staging {} => {
+                    if let Some(client) = clients.staging {
+                        (2, client)
+                    } else {
+                        panic!("No credentials for staging Console")
+                    }
+                }
+            };
 
-    println!("Insantiating {} virtual devices", devices.len());
+            let console_devices = client.get_devices().await?;
+            let mut devices = Vec::new();
+            for console_device in console_devices {
+                devices.push(config::Device::from_console_device(oui, console_device));
+                if devices.len() == max_devices {
+                    break;
+                }
+            }
+            devices
+        } else {
+            panic!("Foo")
+        }
+
+    } else {
+        let config = config::load_config(&opt.device_file)?;
+        config.devices
+    };
+
+    println!("Instantiating {} virtual devices", devices.len());
     for device in &devices {
         println!("{:?}", device);
     }
@@ -110,8 +146,11 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     for device in devices {
         // UdpRadio implements the LoRaWAN device Radio trait
         // use it by sending requested via the lorawan_sender
-        let (lorawan_receiver, mut radio_runtime, lorawan_sender, radio) =
-            UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), INSTANT.clone());
+        let (lorawan_receiver, mut radio_runtime, lorawan_sender, radio) = UdpRadio::new(
+            udp_runtime.publish_to(),
+            udp_runtime.subscribe(),
+            INSTANT.clone(),
+        );
 
         tokio::spawn(async move {
             radio_runtime.run().await.unwrap();
@@ -127,10 +166,13 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         );
 
         tokio::spawn(async move {
-            udp_radio::run_loop(lorawan_receiver, lorawan_sender, lorawan, transmit_delay).await.unwrap();
+            udp_radio::run_loop(lorawan_receiver, lorawan_sender, lorawan, transmit_delay)
+                .await
+                .unwrap();
         });
     }
 
     udp_runtime.run().await.unwrap();
-    Ok(())
+
+    loop {}
 }

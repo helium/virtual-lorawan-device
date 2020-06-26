@@ -1,12 +1,16 @@
 #![macro_use]
-use super::{udp_runtime, debugln, INSTANT};
+use super::{debugln, udp_runtime, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use lorawan_device::{
-    radio, Event as LorawanEvent, Timings, Device as LorawanDevice, Response as LorawanResponse};
+    radio, Device as LorawanDevice, Event as LorawanEvent, Response as LorawanResponse, Timings,
+};
 use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
-use tokio::sync::{broadcast, mpsc::{self, Receiver, Sender}};
 use std::time::Duration;
+use tokio::sync::{
+    broadcast,
+    mpsc::{self, Receiver, Sender},
+};
 use tokio::time::delay_for;
 
 #[derive(Debug)]
@@ -16,13 +20,13 @@ pub enum Event {
     Rx(semtech_udp::PullResp),
 }
 
-impl<'a> From<semtech_udp::PullResp> for  Event {
+impl<'a> From<semtech_udp::PullResp> for Event {
     fn from(rx: semtech_udp::PullResp) -> Self {
         Event::Rx(rx)
     }
 }
 
-impl<'a> From<semtech_udp::PullResp> for  IntermediateEvent {
+impl<'a> From<semtech_udp::PullResp> for IntermediateEvent {
     fn from(rx: semtech_udp::PullResp) -> Self {
         IntermediateEvent::Rx(rx)
     }
@@ -78,14 +82,15 @@ impl Settings {
 pub struct UdpRadioRuntime {
     receiver: broadcast::Receiver<udp_runtime::RxMessage>,
     lorawan_sender: Sender<IntermediateEvent>,
-    time: Instant
+    time: Instant,
 }
 
 pub async fn run_loop(
     mut lorawan_receiver: Receiver<IntermediateEvent>,
     mut lorawan_sender: Sender<IntermediateEvent>,
     mut lorawan: LorawanDevice<UdpRadio>,
-    transmit_delay: u64) -> Result<(), Box<dyn std::error::Error>> {
+    transmit_delay: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
         .unwrap();
@@ -100,74 +105,73 @@ pub async fn run_loop(
                 }
                 IntermediateEvent::SendPacket => {
                     debugln!("Sending DataUp");
-                    let data = [12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 6];
+                    let data = [
+                        12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4,
+                        5, 6,
+                    ];
                     lorawan.send(&data, 2, true)
                 }
                 IntermediateEvent::Rx(event) => {
                     debugln!("Dispatching RxPacket");
-                    lorawan.handle_event(LorawanEvent::RadioEvent(
-                        radio::Event::PhyEvent(event.into())
-                    )
-                    )
+                    lorawan.handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(
+                        event.into(),
+                    )))
                 }
                 IntermediateEvent::Timeout => {
                     debugln!("Dispatchimg Timeout");
-                    lorawan.handle_event( LorawanEvent::Timeout)
+                    lorawan.handle_event(LorawanEvent::Timeout)
                 }
             };
 
             lorawan = new_state;
 
             match response {
-                Ok(response) => {
-
-                    match response {
-                        LorawanResponse::TimeoutRequest(delay) => {
-                            lorawan.get_radio().timer(delay).await;
-                        }
-                        LorawanResponse::NewSession => {
-                            debugln!("Join Success");
-                            let mut sender = lorawan_sender.clone();
-                            tokio::spawn(async move {
-                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
-                            });
-                        }
-                        LorawanResponse::Idle => {
-                            debugln!("Idle");
-                        }
-                        LorawanResponse::NoAck => {
-                            debugln!("NoAck");
-                            let mut sender = lorawan_sender.clone();
-                            tokio::spawn(async move {
-                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
-                            });
-                        }
-                        LorawanResponse::ReadyToSend => {
-                            debugln!("No downlink received but none expected - ready to send again");
-                            let mut sender = lorawan_sender.clone();
-                            tokio::spawn(async move {
-                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
-                            });
-                        }
-                        LorawanResponse::DataDown => {
-                            debugln!("Received downlink or ACK");
-                            let mut sender = lorawan_sender.clone();
-                            tokio::spawn(async move {
-                                delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                                sender.send(IntermediateEvent::SendPacket).await.unwrap();
-                            });
-                        }
-                        LorawanResponse::TxComplete => {
-                            debugln!("TxComplete");
-                        }
-                        LorawanResponse::Rxing => {
-                            debugln!("Receiving");
-                        }
-                        _ => (),
+                Ok(response) => match response {
+                    LorawanResponse::TimeoutRequest(delay) => {
+                        lorawan.get_radio().timer(delay).await;
                     }
+                    LorawanResponse::NewSession => {
+                        debugln!("Join Success");
+                        let mut sender = lorawan_sender.clone();
+                        tokio::spawn(async move {
+                            delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                            sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                        });
+                    }
+                    LorawanResponse::Idle => {
+                        debugln!("Idle");
+                    }
+                    LorawanResponse::NoAck => {
+                        debugln!("NoAck");
+                        let mut sender = lorawan_sender.clone();
+                        tokio::spawn(async move {
+                            delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                            sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                        });
+                    }
+                    LorawanResponse::ReadyToSend => {
+                        debugln!("No downlink received but none expected - ready to send again");
+                        let mut sender = lorawan_sender.clone();
+                        tokio::spawn(async move {
+                            delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                            sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                        });
+                    }
+                    LorawanResponse::DataDown => {
+                        debugln!("Received downlink or ACK");
+                        let mut sender = lorawan_sender.clone();
+                        tokio::spawn(async move {
+                            delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                            sender.send(IntermediateEvent::SendPacket).await.unwrap();
+                        });
+                    }
+                    LorawanResponse::TxComplete => {
+                        debugln!("TxComplete");
+                    }
+                    LorawanResponse::Rxing => {
+                        debugln!("Receiving");
+                    }
+                    _ => (),
                 },
                 Err(_) => {
 
@@ -176,7 +180,6 @@ pub async fn run_loop(
             }
         }
     }
-
 }
 
 impl UdpRadioRuntime {
@@ -201,14 +204,13 @@ impl UdpRadioRuntime {
                         } else {
                             let time_since_scheduled_time = time - scheduled_time;
                             debugln!(
-                                        "Warning! UDP packet received after tx time by {} ms",
-                                        time_since_scheduled_time
-                                    );
+                                "Warning! UDP packet received after tx time by {} ms",
+                                time_since_scheduled_time
+                            );
                         }
-                    },
+                    }
                     StringOrNum::S(_) => {
-                        debugln!(
-                                "\tWarning! UDP packet sent with \"immediate\"");
+                        debugln!("\tWarning! UDP packet sent with \"immediate\"");
                     }
                 }
             }
@@ -225,7 +227,9 @@ struct Settings {
 
 impl From<radio::TxConfig> for Settings {
     fn from(txconfig: radio::TxConfig) -> Settings {
-        Settings { rfconfig: txconfig.rf }
+        Settings {
+            rfconfig: txconfig.rf,
+        }
     }
 }
 
@@ -243,17 +247,22 @@ impl UdpRadio {
         sender: Sender<udp_runtime::TxMessage>,
         receiver: broadcast::Receiver<udp_runtime::RxMessage>,
         time: Instant,
-    ) -> (Receiver<IntermediateEvent>, UdpRadioRuntime, Sender<IntermediateEvent>, UdpRadio) {
+    ) -> (
+        Receiver<IntermediateEvent>,
+        UdpRadioRuntime,
+        Sender<IntermediateEvent>,
+        UdpRadio,
+    ) {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
         let lorawan_sender_clone = lorawan_sender.clone();
         let lorawan_sender_another_clone = lorawan_sender.clone();
-        let time_clone= time.clone();
+        let time_clone = time.clone();
         (
             lorawan_receiver,
             UdpRadioRuntime {
                 receiver,
                 lorawan_sender,
-                time: time_clone
+                time: time_clone,
             },
             lorawan_sender_another_clone,
             UdpRadio {
@@ -271,7 +280,7 @@ impl UdpRadio {
 
     pub async fn timer(&mut self, future_time: u32) {
         let mut sender = self.lorawan_sender.clone();
-        let delay =             future_time - self.time.elapsed().as_millis() as u32;
+        let delay = future_time - self.time.elapsed().as_millis() as u32;
 
         tokio::spawn(async move {
             delay_for(Duration::from_millis(delay as u64)).await;
@@ -279,7 +288,6 @@ impl UdpRadio {
         });
         self.window_start = delay;
     }
-
 }
 
 pub enum Error {}
@@ -297,7 +305,10 @@ impl radio::PhyRxTx for UdpRadio {
         &mut self.rx_buffer
     }
 
-    fn handle_event(&mut self, event: radio::Event<UdpRadio>) -> Result<radio::Response<UdpRadio>, radio::Error<UdpRadio>> {
+    fn handle_event(
+        &mut self,
+        event: radio::Event<UdpRadio>,
+    ) -> Result<radio::Response<UdpRadio>, radio::Error<UdpRadio>> {
         match event {
             radio::Event::TxRequest(tx_config, buffer) => {
                 let size = buffer.len() as u64;
@@ -325,37 +336,37 @@ impl radio::PhyRxTx for UdpRadio {
                 });
                 let rxpk = Some(packet);
 
-                let packet =
-                    semtech_udp::Packet::from_data(PacketData::PushData(PushData { rxpk, stat: None }));
+                let packet = semtech_udp::Packet::from_data(PacketData::PushData(PushData {
+                    rxpk,
+                    stat: None,
+                }));
 
                 if let Err(e) = self.sender.try_send(packet) {
                     panic!("UdpTx Queue Overflow! {}", e)
                 }
 
-                Ok(radio::Response::TxDone(self.time.elapsed().as_millis() as u32))
+                Ok(radio::Response::TxDone(
+                    self.time.elapsed().as_millis() as u32
+                ))
             }
             radio::Event::RxRequest(config) => {
                 self.settings.rfconfig = config;
                 Ok(radio::Response::Idle)
-            },
+            }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
-            radio::Event::PhyEvent(udp_event) => {
-                match udp_event {
-                    Event::Rx(pkt) => {
-                        match base64::decode(pkt.txpk.data) {
-                            Ok(data) => {
-                                self.rx_buffer.clear();
-                                for el in data {
-                                    if let Err(e) = self.rx_buffer.push(el) {
-                                        panic!("Error pushing data into rx_buffer {}", e);
-                                    }
-                                }
-                                Ok(radio::Response::RxDone(radio::RxQuality::new(-115, 4)))
+            radio::Event::PhyEvent(udp_event) => match udp_event {
+                Event::Rx(pkt) => match base64::decode(pkt.txpk.data) {
+                    Ok(data) => {
+                        self.rx_buffer.clear();
+                        for el in data {
+                            if let Err(e) = self.rx_buffer.push(el) {
+                                panic!("Error pushing data into rx_buffer {}", e);
                             }
-                            Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
                         }
+                        Ok(radio::Response::RxDone(radio::RxQuality::new(-115, 4)))
                     }
-                }
+                    Err(e) => panic!("Semtech UDP Packet Decoding Error {}", e),
+                },
             },
         }
     }

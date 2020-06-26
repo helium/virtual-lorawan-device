@@ -1,6 +1,7 @@
 use serde_derive::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use helium_console as console;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Credentials {
@@ -37,8 +38,19 @@ pub struct Device {
     oui: usize,
     credentials: Credentials,
 }
-
 impl Device {
+
+    pub fn from_console_device(oui: usize,device: console::Device) -> Device {
+        Device {
+            transmit_delay: 0,
+            oui,
+            credentials: Credentials {
+                app_eui: device.app_eui().to_string(),
+                app_key: device.app_key().to_string(),
+                dev_eui: device.dev_eui().to_string(),
+            }
+        }
+    }
     pub fn credentials(&self) -> &Credentials {
         &self.credentials
     }
@@ -55,10 +67,50 @@ pub struct Config {
 
 pub fn load_config(path: &str) -> Result<Config, Box<dyn std::error::Error>> {
     if !Path::new(path).exists() {
-        panic!("No lorawan-devices.json found");
+        panic!("No {} found", path);
     }
 
     let contents = fs::read_to_string(path)?;
     let config: Config = serde_json::from_str(&contents)?;
     Ok(config)
+}
+
+#[derive(Deserialize, Serialize)]
+struct ConsoleCredentials {
+    pub staging: Option<String>,
+    pub production: Option<String>,
+}
+
+pub struct ConsoleClients {
+    pub staging: Option<console::client::Client>,
+    pub production: Option<console::client::Client>,
+}
+
+fn key_verify(key: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let key_verify = base64::decode(key)?;
+    if key_verify.len() != 32 {
+        panic!("Invalid API key ipnut");
+    }
+    Ok(())
+}
+
+
+pub fn load_console_client(path: &str) -> Result<ConsoleClients, Box<dyn std::error::Error>> {
+    if !Path::new(path).exists() {
+        panic!("No {} found", path);
+    }
+
+    let contents = fs::read_to_string(path)?;
+    let creds: ConsoleCredentials = serde_json::from_str(&contents)?;
+
+    Ok(ConsoleClients {
+        staging: if let Some(key) = creds.staging {
+            key_verify(&key)?;
+            Some(console::client::Client::new(console::client::Config::new(key))?)
+        } else { None },
+        production: if let Some(key) = creds.production {
+            key_verify(&key)?;
+            Some(console::client::Client::new(console::client::Config::new(key))?)
+        } else { None }
+    })
 }
