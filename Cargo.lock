@@ -557,7 +557,7 @@ dependencies = [
 [[package]]
 name = "helium-console"
 version = "0.1.8"
-source = "git+https://github.com/helium/helium-console-cli?branch=lthiery/random-appkey-deveui#ac51029ddda63b6851ab23188fa8ac3a09a415af"
+source = "git+https://github.com/helium/helium-console-cli#44ba71c953f445870697b7839c6b8f4a50b5da58"
 dependencies = [
  "base64 0.11.0",
  "hex",
@@ -762,6 +762,7 @@ dependencies = [
 [[package]]
 name = "lorawan-device"
 version = "0.1.0"
+source = "git+https://github.com/helium/rust-lorawan#037cf7aeb4dc0cb6a6df6e0fa574e15e89b1975b"
 dependencies = [
  "as-slice",
  "heapless",
@@ -771,6 +772,7 @@ dependencies = [
 [[package]]
 name = "lorawan-encoding"
 version = "0.6.0-rc0"
+source = "git+https://github.com/helium/rust-lorawan#037cf7aeb4dc0cb6a6df6e0fa574e15e89b1975b"
 dependencies = [
  "aes",
  "cmac",
@@ -1371,6 +1373,7 @@ dependencies = [
 [[package]]
 name = "semtech-udp"
 version = "0.1.0"
+source = "git+https://github.com/lthiery/semtech-udp?branch=lthiery/usability#493da4f5d50231a911f8d909299a6eb493a8be61"
 dependencies = [
  "arrayref",
  "num_enum",
@@ -1743,7 +1746,7 @@ checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
 
 [[package]]
 name = "virtual-lorawan-device"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.12.3",
  "bytes 0.4.12",

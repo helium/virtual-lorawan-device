@@ -45,12 +45,11 @@ fn get_random_u32() -> u32 {
 
 #[macro_export]
 macro_rules! debugln {
-    ($fmt:expr) => { print!("{} | {: >8}] ", chrono::Utc::now().format("[%F %H:%M:%S%.3f "), INSTANT.elapsed().as_millis());
-        println!($fmt);
+    ($fmt:expr) => {
+        println!("{} | {: >8}] {}", chrono::Utc::now().format("[%F %H:%M:%S%.3f "), INSTANT.elapsed().as_millis(), $fmt);
     };
     ($fmt:expr, $($arg:tt)*) => {
-        print!("{} | {: >8}] ", chrono::Utc::now().format("[%F %H:%M:%S%.3f "), INSTANT.elapsed().as_millis());
-        println!($fmt, $($arg)*);
+        println!("{} | {: >8}] {}", chrono::Utc::now().format("[%F %H:%M:%S%.3f "), INSTANT.elapsed().as_millis(), format!($fmt, $($arg)*));
     }
 }
 
@@ -107,7 +106,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Instantiating {} virtual devices", devices.len());
     for device in &devices {
-        println!("{:?}", device);
+        println!("{},", serde_json::to_string(&device)?);
     }
 
     unsafe {
@@ -133,7 +132,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     // the delay gives the random number generator get started
     delay_for(Duration::from_millis(50)).await;
 
-    let my_address = SocketAddr::from(([0, 0, 0, 0], 1687));
+    let my_address = SocketAddr::from(([0, 0, 0, 0], get_random_u32() as u16));
     let host = SocketAddr::from_str(opt.host.as_str())?;
 
     let udp_runtime = UdpRuntime::new(my_address, host).await?;
