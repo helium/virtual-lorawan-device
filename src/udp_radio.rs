@@ -2,9 +2,11 @@
 use super::{udp_runtime, debugln, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
-use lorawan_device::{radio, Event as LorawanEvent, State as LorawanState, Timings, Device as LorawanDevice, Response as LorawanResponse};
+use lorawan_device::{
+    radio, Event as LorawanEvent, State as LorawanState, Timings, Device as LorawanDevice, Response as LorawanResponse,
+session};
 use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::{broadcast, mpsc::{self, Receiver, Sender}};
 use std::time::Duration;
 use tokio::time::delay_for;
 
@@ -76,22 +78,20 @@ impl Settings {
 
 // Runtime translates UDP events into Device events
 pub struct UdpRadioRuntime {
-    receiver: Receiver<udp_runtime::RxMessage>,
+    receiver: broadcast::Receiver<udp_runtime::RxMessage>,
     lorawan_sender: Sender<IntermediateEvent>,
     time: Instant
 }
 
 pub async fn run_loop(
-    lorawan_receiver: Receiver<IntermediateEvent>,
-    lorawan_sender: Sender<IntermediateEvent>,
-    lorawan: LorawanDevice<UdpRadio>,
+    mut lorawan_receiver: Receiver<IntermediateEvent>,
+    mut lorawan_sender: Sender<IntermediateEvent>,
+    mut lorawan: LorawanDevice<UdpRadio>,
     transmit_delay: u64) -> Result<(), Box<dyn std::error::Error>> {
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
         .unwrap();
 
-    // // initialize as 1 to account for the join
-    let mut sent_packets: usize = 1;
     loop {
         if let Some(event) = lorawan_receiver.recv().await {
             let (new_state, response) = match event {
@@ -175,7 +175,8 @@ pub async fn run_loop(
                     }
                 },
                 Err(e) => {
-                    panic!("LoRaWAN Stack Error");
+
+                    //panic!("LoRaWAN Stack Error");
                 }
             }
         }
@@ -186,34 +187,33 @@ pub async fn run_loop(
 impl UdpRadioRuntime {
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            if let Some(event) = self.receiver.recv().await {
+            let event = self.receiver.recv().await?;
 
-                if let semtech_udp::PacketData::PullResp(data) = event.data {
-                    let mut sender = self.lorawan_sender.clone();
-                    match &data.txpk.tmst {
-                        StringOrNum::N(n) => {
-                            let scheduled_time = n/1000;
-                            let time = self.time.elapsed().as_millis() as u64;
-                            if scheduled_time > time  {
-                                // make units the same
-                                let delay = scheduled_time - time as u64;
-                                // dispatch the receive event only once its been received
-                                tokio::spawn(async move {
-                                    delay_for(Duration::from_millis(delay + 50 )).await;
-                                    sender.send(data.into()).await.unwrap();
-                                });
-                            } else {
-                                let time_since_scheduled_time = time - scheduled_time;
-                                debugln!(
-                                            "Warning! UDP packet received after tx time by {} ms",
-                                            time_since_scheduled_time
-                                        );
-                            }
-                        },
-                        StringOrNum::S(s) => {
+            if let semtech_udp::PacketData::PullResp(data) = event.data {
+                let mut sender = self.lorawan_sender.clone();
+                match &data.txpk.tmst {
+                    StringOrNum::N(n) => {
+                        let scheduled_time = n / 1000;
+                        let time = self.time.elapsed().as_millis() as u64;
+                        if scheduled_time > time {
+                            // make units the same
+                            let delay = scheduled_time - time as u64;
+                            // dispatch the receive event only once its been received
+                            tokio::spawn(async move {
+                                delay_for(Duration::from_millis(delay + 50)).await;
+                                sender.send(data.into()).await.unwrap();
+                            });
+                        } else {
+                            let time_since_scheduled_time = time - scheduled_time;
                             debugln!(
-                                    "\tWarning! UDP packet sent with \"immediate\"");
+                                        "Warning! UDP packet received after tx time by {} ms",
+                                        time_since_scheduled_time
+                                    );
                         }
+                    },
+                    StringOrNum::S(s) => {
+                        debugln!(
+                                "\tWarning! UDP packet sent with \"immediate\"");
                     }
                 }
             }
@@ -246,7 +246,7 @@ pub struct UdpRadio {
 impl UdpRadio {
     pub fn new<'a>(
         sender: Sender<udp_runtime::TxMessage>,
-        receiver: Receiver<udp_runtime::RxMessage>,
+        receiver: broadcast::Receiver<udp_runtime::RxMessage>,
         time: Instant,
     ) -> (Receiver<IntermediateEvent>, UdpRadioRuntime, Sender<IntermediateEvent>, UdpRadio) {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
