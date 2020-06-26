@@ -1,20 +1,25 @@
 #[macro_use]
 extern crate lazy_static;
-use std::net::SocketAddr;
+
 mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
-use lorawan_device::{
-    Device as LoRaWanDevice,
-};
-use rand::Rng;
-use std::process;
-use std::sync::Mutex;
-use std::time::Duration;
-use std::{thread, time};
-use structopt::StructOpt;
-use tokio::time::delay_for;
 use udp_radio::UdpRadio;
+
+use {
+    lorawan_device::Device as LoRaWanDevice,
+    rand::Rng,
+    structopt::StructOpt,
+    std::{
+        net::SocketAddr,
+        process,
+        sync::Mutex,
+        time::{self, Duration, Instant},
+        thread
+    },
+    tokio::time::delay_for,
+};
+
 
 const DEVICES_PATH: &str = "lorawan-devices.json";
 mod config;
@@ -74,9 +79,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
-use std::time::Instant;
-
-
 
 lazy_static! {
     static ref INSTANT: Instant = Instant::now();
@@ -126,10 +128,6 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
     let udp_runtime = UdpRuntime::new(my_address, host).await?;
 
-
-
-
-
     for device in devices {
         // UdpRadio implements the LoRaWAN device Radio trait
         // use it by sending requested via the lorawan_sender
@@ -154,9 +152,6 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    tokio::spawn(async move {
-        udp_runtime.run().await.unwrap();
-    });
-
-    loop {}
+    udp_runtime.run().await.unwrap();
+    Ok(())
 }
