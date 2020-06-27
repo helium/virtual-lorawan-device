@@ -28,7 +28,6 @@ static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
 
 // this is a workaround so that we can have a global function for random u32
 fn get_random_u32() -> u32 {
-    //0xFFFF
     unsafe {
         if let Some(mutex) = &RANDOM {
             let mut random = mutex.lock().unwrap();
@@ -143,7 +142,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         let (lorawan_receiver, mut radio_runtime, lorawan_sender, radio) = UdpRadio::new(
             udp_runtime.publish_to(),
             udp_runtime.subscribe(),
-            INSTANT.clone(),
+            *INSTANT,
         );
 
         tokio::spawn(async move {
@@ -168,5 +167,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
     udp_runtime.run().await.unwrap();
 
-    loop {}
+    loop {
+        thread::sleep(time::Duration::from_millis(6_000_000))
+    }
 }

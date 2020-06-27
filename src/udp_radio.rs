@@ -179,9 +179,11 @@ pub async fn run_loop(
                     }
                     _ => (),
                 },
-                Err(_) => {
-
-                    //panic!("LoRaWAN Stack Error");
+                Err(err) => {
+                    match err {
+                        lorawan_device::Error::Radio(_) => (),
+                        _ => panic!("LoRaWAN Stack Error"),
+                    }
                 }
             }
         }
@@ -249,7 +251,7 @@ pub struct UdpRadio {
 }
 
 impl UdpRadio {
-    pub fn new<'a>(
+    pub fn new(
         sender: Sender<udp_runtime::TxMessage>,
         receiver: broadcast::Receiver<udp_runtime::RxMessage>,
         time: Instant,
@@ -262,13 +264,12 @@ impl UdpRadio {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
         let lorawan_sender_clone = lorawan_sender.clone();
         let lorawan_sender_another_clone = lorawan_sender.clone();
-        let time_clone = time.clone();
         (
             lorawan_receiver,
             UdpRadioRuntime {
                 receiver,
                 lorawan_sender,
-                time: time_clone,
+                time,
             },
             lorawan_sender_another_clone,
             UdpRadio {
