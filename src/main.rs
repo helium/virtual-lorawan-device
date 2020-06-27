@@ -139,11 +139,8 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     for device in devices {
         // UdpRadio implements the LoRaWAN device Radio trait
         // use it by sending requested via the lorawan_sender
-        let (lorawan_receiver, mut radio_runtime, lorawan_sender, radio) = UdpRadio::new(
-            udp_runtime.publish_to(),
-            udp_runtime.subscribe(),
-            *INSTANT,
-        );
+        let (lorawan_receiver, mut radio_runtime, lorawan_sender, radio) =
+            UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), *INSTANT);
 
         tokio::spawn(async move {
             radio_runtime.run().await.unwrap();

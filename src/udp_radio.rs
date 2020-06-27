@@ -179,12 +179,10 @@ pub async fn run_loop(
                     }
                     _ => (),
                 },
-                Err(err) => {
-                    match err {
-                        lorawan_device::Error::Radio(_) => (),
-                        _ => panic!("LoRaWAN Stack Error"),
-                    }
-                }
+                Err(err) => match err {
+                    lorawan_device::Error::Radio(_) => (),
+                    _ => panic!("LoRaWAN Stack Error"),
+                },
             }
         }
     }
