@@ -246,7 +246,7 @@ pub struct UdpRadio {
     lorawan_sender: Sender<IntermediateEvent>,
     rx_buffer: HVec<u8, U256>,
     settings: Settings,
-    pub time: Instant,
+    time: Instant,
     window_start: u32,
 }
 
