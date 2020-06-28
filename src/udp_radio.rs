@@ -203,13 +203,13 @@ pub async fn run_loop(
                         match e {
                             lorawan::session::Error::RadioEventWhileIdle => (),
                             _ => {
-                                panic!("LoRaWAN Error Session {:?}", e)
+                                panic!("LoRaWAN Error Session {:?}\r\n", e)
 
                             }
                         }
                     }
                     lorawan::Error::NoSession(e) => {
-                        panic!("LoRaWAN Error NoSession{:?}", e)
+                        panic!("LoRaWAN Error NoSession{:?}\r\n", e)
 
                     }
                 },
