@@ -13,6 +13,10 @@ pub struct Opt {
     #[structopt(short, long, default_value = DEVICES_PATH)]
     pub device_file: String,
 
+    /// Path to JSON devices file
+    #[structopt(long)]
+    pub disable_jitter: bool,
+
     /// Choose command to run
     #[structopt(subcommand)]
     pub command: Option<Command>,

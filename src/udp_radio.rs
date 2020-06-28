@@ -2,7 +2,7 @@
 use super::{debugln, udp_runtime, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
-use lorawan_device::{
+use lorawan_device::{ self as lorawan,
     radio, Device as LorawanDevice, Event as LorawanEvent, Response as LorawanResponse, Timings,
 };
 use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
@@ -85,7 +85,7 @@ pub struct UdpRadioRuntime {
     time: Instant,
 }
 
-pub fn pretty_device(creds: &lorawan_device::Credentials) -> String {
+pub fn pretty_device(creds: &lorawan::Credentials) -> String {
     let mut bytes: Vec<u8> = Vec::new();
     bytes.extend(creds.deveui());
     bytes.reverse();
@@ -99,6 +99,15 @@ pub async fn run_loop(
     mut lorawan: LorawanDevice<UdpRadio>,
     transmit_delay: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
+
+    // if jitter is enabled, we'll delay 0-127 ms
+    let delay = transmit_delay + if lorawan.get_radio().jitter {
+        (super::get_random_u32() & 0x7F)  as u64
+    } else {
+        0
+    };
+    delay_for(Duration::from_millis(delay as u64)).await;
+
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
         .unwrap();
@@ -108,6 +117,7 @@ pub async fn run_loop(
         if let Some(event) = lorawan_receiver.recv().await {
             let (new_state, response) = match event {
                 IntermediateEvent::NewSession => {
+
                     debugln!("{}: Creating Session", device_ref);
                     let event = LorawanEvent::NewSession;
                     lorawan.handle_event(event)
@@ -165,9 +175,17 @@ pub async fn run_loop(
                     }
                     LorawanResponse::DataDown => {
                         debugln!("{}: Received downlink or ACK", device_ref);
+                        //
+                        // // if jitter is enabled, we'll delay 0-127 ms
+                        // let delay = transmit_delay + if lorawan.get_radio().jitter {
+                        //     (super::get_random_u32() & 0x7F)  as u64
+                        // } else {
+                        //     0
+                        // };
+
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
-                            delay_for(Duration::from_millis(transmit_delay as u64)).await;
+                            delay_for(Duration::from_millis(delay as u64)).await;
                             sender.send(IntermediateEvent::SendPacket).await.unwrap();
                         });
                     }
@@ -180,8 +198,20 @@ pub async fn run_loop(
                     _ => (),
                 },
                 Err(err) => match err {
-                    lorawan_device::Error::Radio(_) => (),
-                    _ => panic!("LoRaWAN Stack Error"),
+                    lorawan::Error::Radio(_) => (),
+                    lorawan::Error::Session(e) => {
+                        match e {
+                            lorawan::session::Error::RadioEventWhileIdle => (),
+                            _ => {
+                                panic!("LoRaWAN Error Session {:?}", e)
+
+                            }
+                        }
+                    }
+                    lorawan::Error::NoSession(e) => {
+                        panic!("LoRaWAN Error NoSession{:?}", e)
+
+                    }
                 },
             }
         }
@@ -246,6 +276,7 @@ pub struct UdpRadio {
     settings: Settings,
     time: Instant,
     window_start: u32,
+    jitter: bool
 }
 
 impl UdpRadio {
@@ -279,8 +310,12 @@ impl UdpRadio {
                 },
                 time,
                 window_start: 0,
+                jitter: true
             },
         )
+    }
+    pub fn disable_jitter(&mut self) {
+        self.jitter = false;
     }
 
     pub async fn timer(&mut self, future_time: u32) {
