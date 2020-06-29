@@ -2,9 +2,11 @@
 use super::{debugln, udp_runtime, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
-use lorawan_device::{ self as lorawan,
-    radio, Device as LorawanDevice, Event as LorawanEvent, Response as LorawanResponse, Timings,
+use lorawan_device::{
+    self as lorawan, radio, Device as LorawanDevice, Event as LorawanEvent,
+    Response as LorawanResponse, Timings,
 };
+use rand::Rng;
 use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
 use std::time::Duration;
 use tokio::sync::{
@@ -99,15 +101,6 @@ pub async fn run_loop(
     mut lorawan: LorawanDevice<UdpRadio>,
     transmit_delay: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-
-    // if jitter is enabled, we'll delay 0-127 ms
-    let delay = transmit_delay + if lorawan.get_radio().jitter {
-        (super::get_random_u32() & 0x7F)  as u64
-    } else {
-        0
-    };
-    delay_for(Duration::from_millis(delay as u64)).await;
-
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
         .unwrap();
@@ -117,6 +110,14 @@ pub async fn run_loop(
         if let Some(event) = lorawan_receiver.recv().await {
             let (new_state, response) = match event {
                 IntermediateEvent::NewSession => {
+                    // if jitter is enabled, we'll delay 0-127 ms
+                    let delay = if lorawan.get_radio().jitter {
+                        let mut rng = rand::thread_rng();
+                        rng.gen::<u64>() & 0x7F
+                    } else {
+                        0
+                    };
+                    delay_for(Duration::from_millis(delay as u64)).await;
 
                     debugln!("{}: Creating Session", device_ref);
                     let event = LorawanEvent::NewSession;
@@ -175,13 +176,15 @@ pub async fn run_loop(
                     }
                     LorawanResponse::DataDown => {
                         debugln!("{}: Received downlink or ACK", device_ref);
-                        //
-                        // // if jitter is enabled, we'll delay 0-127 ms
-                        // let delay = transmit_delay + if lorawan.get_radio().jitter {
-                        //     (super::get_random_u32() & 0x7F)  as u64
-                        // } else {
-                        //     0
-                        // };
+
+                        // if jitter is enabled, we'll delay 0-127 ms
+                        let delay = transmit_delay
+                            + if lorawan.get_radio().jitter {
+                                let mut rng = rand::thread_rng();
+                                rng.gen::<u64>() & 0x7F
+                            } else {
+                                0
+                            };
 
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
@@ -200,17 +203,20 @@ pub async fn run_loop(
                 Err(err) => match err {
                     lorawan::Error::Radio(_) => (),
                     lorawan::Error::Session(e) => {
+                        use lorawan::session::Error;
                         match e {
-                            lorawan::session::Error::RadioEventWhileIdle => (),
-                            _ => {
-                                panic!("LoRaWAN Error Session {:?}\r\n", e)
-
-                            }
+                            Error::RadioEventWhileIdle
+                            | Error::RadioEventWhileWaitingForRxWindow => (),
+                            _ => panic!("LoRaWAN Error Session {:?}\r\n", e),
                         }
                     }
                     lorawan::Error::NoSession(e) => {
-                        panic!("LoRaWAN Error NoSession{:?}\r\n", e)
-
+                        use lorawan::no_session::Error;
+                        match e {
+                            Error::RadioEventWhileIdle
+                            | Error::RadioEventWhileWaitingForJoinWindow => (),
+                            _ => panic!("LoRaWAN Error NoSession {:?}\r\n", e),
+                        }
                     }
                 },
             }
@@ -276,7 +282,7 @@ pub struct UdpRadio {
     settings: Settings,
     time: Instant,
     window_start: u32,
-    jitter: bool
+    jitter: bool,
 }
 
 impl UdpRadio {
@@ -310,7 +316,7 @@ impl UdpRadio {
                 },
                 time,
                 window_start: 0,
-                jitter: true
+                jitter: true,
             },
         )
     }

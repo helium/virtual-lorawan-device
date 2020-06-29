@@ -762,6 +762,7 @@ dependencies = [
 [[package]]
 name = "lorawan-device"
 version = "0.1.0"
+source = "git+https://github.com/helium/rust-lorawan#c48f4f386543a6250cab8de0ec8592d37a2c25c8"
 dependencies = [
  "as-slice",
  "heapless",
@@ -771,6 +772,7 @@ dependencies = [
 [[package]]
 name = "lorawan-encoding"
 version = "0.6.0-rc0"
+source = "git+https://github.com/helium/rust-lorawan#c48f4f386543a6250cab8de0ec8592d37a2c25c8"
 dependencies = [
  "aes",
  "cmac",
@@ -1371,7 +1373,7 @@ dependencies = [
 [[package]]
 name = "semtech-udp"
 version = "0.1.0"
-source = "git+https://github.com/lthiery/semtech-udp?branch=lthiery/usability#493da4f5d50231a911f8d909299a6eb493a8be61"
+source = "git+https://github.com/lthiery/semtech-udp#7a8b06d6e899db71f94f5554aac1e907c463dffd"
 dependencies = [
  "arrayref",
  "num_enum",

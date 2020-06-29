@@ -87,7 +87,7 @@ impl UdpRuntime {
         // "connecting" filters for only frames from the server
         socket.connect(host).await?;
         socket.send(&[0]).await?;
-        let (rx_sender, _) = broadcast::channel(16);
+        let (rx_sender, _) = broadcast::channel(100);
         let (tx_sender, tx_receiver) = mpsc::channel(100);
 
         let tx_sender_clone = tx_sender.clone();
