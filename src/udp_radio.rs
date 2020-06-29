@@ -6,7 +6,6 @@ use lorawan_device::{
     self as lorawan, radio, Device as LorawanDevice, Event as LorawanEvent,
     Response as LorawanResponse, Timings,
 };
-use rand::Rng;
 use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
 use std::time::Duration;
 use tokio::sync::{
@@ -112,8 +111,7 @@ pub async fn run_loop(
                 IntermediateEvent::NewSession => {
                     // if jitter is enabled, we'll delay 0-127 ms
                     let delay = if lorawan.get_radio().jitter {
-                        let mut rng = rand::thread_rng();
-                        rng.gen::<u64>() & 0x7F
+                        (super::get_random_u32() & 0x7F) as u64
                     } else {
                         0
                     };
@@ -180,9 +178,8 @@ pub async fn run_loop(
                         // if jitter is enabled, we'll delay 0-127 ms
                         let delay = transmit_delay
                             + if lorawan.get_radio().jitter {
-                                let mut rng = rand::thread_rng();
-                                rng.gen::<u64>() & 0x7F
-                            } else {
+                            (super::get_random_u32() & 0x7F) as u64
+                        } else {
                                 0
                             };
 
