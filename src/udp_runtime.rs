@@ -117,7 +117,7 @@ impl UdpRuntimeRx {
             match self.socket_recv.recv(&mut buf).await {
                 Ok(n) => {
                     let packet = semtech_udp::Packet::parse(&buf[0..n], n)?;
-                    match packet.data {
+                    match packet.data() {
                         PacketData::PullAck | PacketData::PushAck => 0,
                         _ => self.sender.send(packet).unwrap(),
                     };

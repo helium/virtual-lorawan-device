@@ -229,7 +229,7 @@ impl UdpRadioRuntime {
         loop {
             let event = self.receiver.recv().await?;
 
-            if let semtech_udp::PacketData::PullResp(data) = event.data {
+            if let semtech_udp::PacketData::PullResp(data) = event.data() {
                 let mut sender = self.lorawan_sender.clone();
                 match &data.txpk.tmst {
                     StringOrNum::N(n) => {
@@ -238,10 +238,11 @@ impl UdpRadioRuntime {
                         if scheduled_time > time {
                             // make units the same
                             let delay = scheduled_time - time as u64;
+                            let event = IntermediateEvent::from(data.clone() );
                             // dispatch the receive event only once its been received
                             tokio::spawn(async move {
                                 delay_for(Duration::from_millis(delay + 50)).await;
-                                sender.send(data.into()).await.unwrap();
+                                sender.send(event).await.unwrap();
                             });
                         } else {
                             let time_since_scheduled_time = time - scheduled_time;
