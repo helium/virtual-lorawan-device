@@ -17,6 +17,10 @@ pub struct Opt {
     #[structopt(long)]
     pub disable_jitter: bool,
 
+    /// Maximum amount of devices to use
+    #[structopt(short, long, default_value = "32")]
+    pub max_devices: usize,
+
     /// Choose command to run
     #[structopt(subcommand)]
     pub command: Option<Command>,
@@ -26,10 +30,6 @@ pub struct Opt {
 pub enum Command {
     /// Use device credentials from Console
     Console {
-        /// Maximum amount of devices to use
-        #[structopt(short, long, default_value = "32")]
-        max_devices: usize,
-
         /// Staging or console
         #[structopt(subcommand)]
         cmd: Console,

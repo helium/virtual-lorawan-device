@@ -70,7 +70,7 @@ const CONSOLE_CREDENTIALS_PATH: &str = "console-credentials.json";
 
 async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
     let devices = if let Some(cmd) = opt.command {
-        let Command::Console { max_devices, cmd } = cmd;
+        let Command::Console { cmd } = cmd;
         let clients = config::load_console_client(CONSOLE_CREDENTIALS_PATH)?;
         let (oui, client) = match cmd {
             Console::Production {} => {
@@ -93,14 +93,16 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         let mut devices = Vec::new();
         for console_device in console_devices {
             devices.push(config::Device::from_console_device(oui, console_device));
-            if devices.len() == max_devices {
+            if devices.len() == opt.max_devices  {
                 break;
             }
         }
         devices
     } else {
         let config = config::load_config(&opt.device_file)?;
-        config.devices
+        let mut devices = config.devices;
+        devices.truncate(opt.max_devices);
+        devices
     };
 
     println!("Instantiating {} virtual devices", devices.len());
