@@ -136,6 +136,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
     let udp_runtime = UdpRuntime::new(my_address, host).await?;
 
+    let num_devices = devices.len();
     for device in devices {
         // UdpRadio implements the LoRaWAN device Radio trait
         // use it by sending requested via the lorawan_sender
@@ -143,7 +144,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), *INSTANT);
 
         // disable jitter by default if there is only one device
-        if opt.disable_jitter || devices.len() == 1 {
+        if opt.disable_jitter || num_devices == 1 {
             radio.disable_jitter();
         }
 
