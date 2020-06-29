@@ -21,13 +21,13 @@ override the name with CLI option) in the following format:
         "oui": 1,
         "transmit_delay": 10000
       }
-    ],
+    ]
 }
 ```
 You'll want to make sure the credentials match some devices on Console.
 
 If you want to pull credentials from Console (Staging or Prod), you need
-to create a file called `consolle-credentials.json` which should look like this:
+to create a file called `console-credentials.json` which should look like this:
 
 ```json
 {
@@ -36,21 +36,21 @@ to create a file called `consolle-credentials.json` which should look like this:
 }
 ```
 
-You may ignore the field of the console you are not using (ie: just include staging
+You may ignore the field of the console you are not using (ie: just include "staging"
 if you are running against staging). We also limit devices to 32 by default, but
-the `--max-devices` option let's you override that.
+the global `--max-devices` option let's you override that.
 
 Note, that if you want to create lots of devices on Console, you can use 
 [the CLI](https://github.com/helium/helium-console-cli). The command `device 
 create-by-app-eui` is particularly useful for generating N devices when you don't 
 care about name or credentials. 
 Also note that the only way to point the CLI to staging is by editing the 
-`.helium-console-config.toml`.
+`.helium-console-config.toml` by hand.
 
 Finally, you should know that when you run the utility by using devices from console,
 the devices get printed to the terminal output in a format that is friendly for
-`lorawan-devices.json`. Therefore, making curated lists of certain devices after
-running them from an automatic import session can be done easily.
+`lorawan-devices.json`. Therefore, copy from there and making curated lists devices
+after running them from an automatic import session can be done easily.
 
 # Miner Setup
 This utility is directly compatible with [a Miner that can be easily deployed using Docker](https://developer.helium.com/blockchain/run-your-own-miner). Note that state channel test mode requires that the Miner be added to the blockchain.
