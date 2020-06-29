@@ -2,8 +2,12 @@
 # virtual-lorawan-device
 Download a compiled release [here](https://github.com/helium/virtual-lorawan-devicec/releases).
 # Features
-This utility replaces a Semtech forwarder with this virtual LoRaWAN device instance.
-Create a file called `lorawan-devices.json`, in the following format:
+This utility replaces a Semtech forwarder with this utility which instantiates
+one or more virtual LoRaWAN devices. You can load devices in two ways: using
+a local file (default) or by pulling devices from Console.
+
+To use a local file, create a file called `lorawan-devices.json` (you can
+override the name with CLI option) in the following format:
 ```json
 {
     "devices":
@@ -26,9 +30,27 @@ Create a file called `lorawan-devices.json`, in the following format:
 ```
 You'll want to make sure the credentials match some devices on Console.
 The gateways field is optional, as it is only relevant for the "state channel test" mode.
-In "state channel test", the utility will detect the open state channel by using the blockchain-api.
-If there are more than 3 blocks left, it will Join and starting sending packets.
-When there are less than 3 blocks left, the device will stop sending packets and the utility will block until the state channel close transaction gets posted.
-The output compares the amount of packets it sent versus what was posted in the channel on behalf of the gateway from the JSON configuration file.
+
+If you want to pull credentials from Console (Staging or Prod), you need
+to create a file called `consolle-credentials.json` which should look like this:
+
+```json
+{
+  "staging": "API_KEY",
+  "production": "API_KEY"
+}
+```
+
+You may ignore the field of the console you are not using (ie: just include staging
+if you are running against staging). We also limit devices to 32 by default, but
+the `-m` option let's you override that.
+
+Note, that if you want to create lots of devices on Console, you can use 
+[the CLI](https://github.com/helium/helium-console-cli). The command `device 
+create-by-app-eui` is particularly useful for generating N devices when you don't 
+care about name or credentials. 
+Also note that the only way to point the CLI to staging is by editing the 
+`.helium-console-config.toml`.
+
 # Miner Setup
 This utility is directly compatible with [a Miner that can be easily deployed using Docker](https://developer.helium.com/blockchain/run-your-own-miner). Note that state channel test mode requires that the Miner be added to the blockchain.
