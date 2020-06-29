@@ -143,7 +143,6 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), *INSTANT);
 
         if opt.disable_jitter {
-            println!("DISABLING JITTER");
             radio.disable_jitter();
         }
 
