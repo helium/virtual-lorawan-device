@@ -120,7 +120,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             unsafe {
                 if let Some(mutex) = &RANDOM {
                     let mut random = mutex.lock().unwrap();
-                    while random.len() < 32 {
+                    while random.len() < 2056 {
                         random.push(rng.gen())
                     }
                 }
