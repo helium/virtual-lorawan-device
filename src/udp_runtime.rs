@@ -87,7 +87,7 @@ impl UdpRuntime {
         // "connecting" filters for only frames from the server
         socket.connect(host).await?;
         socket.send(&[0]).await?;
-        let (rx_sender, _) = broadcast::channel(16);
+        let (rx_sender, _) = broadcast::channel(100);
         let (tx_sender, tx_receiver) = mpsc::channel(100);
 
         let tx_sender_clone = tx_sender.clone();
@@ -117,7 +117,7 @@ impl UdpRuntimeRx {
             match self.socket_recv.recv(&mut buf).await {
                 Ok(n) => {
                     let packet = semtech_udp::Packet::parse(&buf[0..n], n)?;
-                    match packet.data {
+                    match packet.data() {
                         PacketData::PullAck | PacketData::PushAck => 0,
                         _ => self.sender.send(packet).unwrap(),
                     };

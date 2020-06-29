@@ -136,11 +136,17 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
 
     let udp_runtime = UdpRuntime::new(my_address, host).await?;
 
+    let num_devices = devices.len();
     for device in devices {
         // UdpRadio implements the LoRaWAN device Radio trait
         // use it by sending requested via the lorawan_sender
-        let (lorawan_receiver, mut radio_runtime, lorawan_sender, radio) =
+        let (lorawan_receiver, mut radio_runtime, lorawan_sender, mut radio) =
             UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), *INSTANT);
+
+        // disable jitter by default if there is only one device
+        if opt.disable_jitter || num_devices == 1 {
+            radio.disable_jitter();
+        }
 
         tokio::spawn(async move {
             radio_runtime.run().await.unwrap();

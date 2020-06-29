@@ -17,7 +17,7 @@ version = "=0.13.6"
 version = "0.4.1"
 
 [dependencies]
-semtech-udp = { git = "https://github.com/lthiery/semtech-udp", branch = "lthiery/usability" }
+semtech-udp = { git = "https://github.com/lthiery/semtech-udp" }
 lorawan-device = { git = "https://github.com/helium/rust-lorawan" }
 rand = "0.7.3"
 heapless = "0.5.4"
