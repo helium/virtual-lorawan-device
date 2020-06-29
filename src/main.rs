@@ -93,7 +93,7 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         let mut devices = Vec::new();
         for console_device in console_devices {
             devices.push(config::Device::from_console_device(oui, console_device));
-            if devices.len() == opt.max_devices  {
+            if devices.len() == opt.max_devices {
                 break;
             }
         }
