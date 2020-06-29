@@ -13,7 +13,7 @@ pub struct Opt {
     #[structopt(short, long, default_value = DEVICES_PATH)]
     pub device_file: String,
 
-    /// Path to JSON devices file
+    /// Disable jitter on transmits (is done by default for one device)
     #[structopt(long)]
     pub disable_jitter: bool,
 

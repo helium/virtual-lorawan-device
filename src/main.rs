@@ -142,7 +142,8 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
         let (lorawan_receiver, mut radio_runtime, lorawan_sender, mut radio) =
             UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), *INSTANT);
 
-        if opt.disable_jitter {
+        // disable jitter by default if there is only one device
+        if opt.disable_jitter || devices.len() == 1 {
             radio.disable_jitter();
         }
 
