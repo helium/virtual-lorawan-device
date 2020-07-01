@@ -122,12 +122,13 @@ pub async fn run_loop(
                     lorawan.handle_event(event)
                 }
                 IntermediateEvent::SendPacket => {
-                    debugln!("{}: Sending DataUp", device_ref);
                     let data = [
-                        12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4, 5, 12, 3, 4,
-                        5, 6,
+                        12, 3
                     ];
-                    lorawan.send(&data, 2, true)
+                    let mut ret = lorawan.send(&data, 2, true);
+                    debugln!("{}: Sending DataUp, FcntUp = {}", device_ref, ret.0.get_fcnt_up().unwrap() - 1);
+                    ret
+
                 }
                 IntermediateEvent::Rx(event) => lorawan.handle_event(LorawanEvent::RadioEvent(
                     radio::Event::PhyEvent(event.into()),
@@ -143,16 +144,16 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NewSession => {
-                        debugln!("{}: Join Success", device_ref);
+                        debugln!("{}: Join Success {:?}", device_ref, lorawan.get_session_keys().unwrap());
                         let mut sender = lorawan_sender.clone();
+
+
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
                             sender.send(IntermediateEvent::SendPacket).await.unwrap();
                         });
                     }
-                    LorawanResponse::Idle => {
-                        debugln!("{}: Idle", device_ref);
-                    }
+                    LorawanResponse::Idle => (),
                     LorawanResponse::NoAck => {
                         debugln!("{}: NoAck", device_ref);
                         let mut sender = lorawan_sender.clone();
@@ -172,8 +173,8 @@ pub async fn run_loop(
                             sender.send(IntermediateEvent::SendPacket).await.unwrap();
                         });
                     }
-                    LorawanResponse::DataDown => {
-                        debugln!("{}: Received downlink or ACK", device_ref);
+                    LorawanResponse::DataDown(fcnt_down) => {
+                        debugln!("{}: Received downlink or ACK, FcntDown = {} ", device_ref, fcnt_down);
 
                         // if jitter is enabled, we'll delay 0-127 ms
                         let delay = transmit_delay
@@ -188,9 +189,6 @@ pub async fn run_loop(
                             delay_for(Duration::from_millis(delay as u64)).await;
                             sender.send(IntermediateEvent::SendPacket).await.unwrap();
                         });
-                    }
-                    LorawanResponse::TxComplete => {
-                        debugln!("{}: TxComplete", device_ref);
                     }
                     LorawanResponse::Rxing => {
                         debugln!("{}: Receiving", device_ref);

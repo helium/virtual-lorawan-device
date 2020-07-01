@@ -557,7 +557,7 @@ dependencies = [
 [[package]]
 name = "helium-console"
 version = "0.1.8"
-source = "git+https://github.com/helium/helium-console-cli#44ba71c953f445870697b7839c6b8f4a50b5da58"
+source = "git+https://github.com/helium/helium-console-cli#385fb6feb910d290ae4e44cee13aadaad9c2028f"
 dependencies = [
  "base64 0.11.0",
  "hex",
@@ -762,7 +762,7 @@ dependencies = [
 [[package]]
 name = "lorawan-device"
 version = "0.1.0"
-source = "git+https://github.com/helium/rust-lorawan#c48f4f386543a6250cab8de0ec8592d37a2c25c8"
+source = "git+https://github.com/helium/rust-lorawan#32b4dce795dbd117c81c15f0ae9171da75b12b2a"
 dependencies = [
  "as-slice",
  "heapless",
@@ -772,10 +772,11 @@ dependencies = [
 [[package]]
 name = "lorawan-encoding"
 version = "0.6.0-rc0"
-source = "git+https://github.com/helium/rust-lorawan#c48f4f386543a6250cab8de0ec8592d37a2c25c8"
+source = "git+https://github.com/helium/rust-lorawan#32b4dce795dbd117c81c15f0ae9171da75b12b2a"
 dependencies = [
  "aes",
  "cmac",
+ "generic-array 0.14.2",
 ]
 
 [[package]]
