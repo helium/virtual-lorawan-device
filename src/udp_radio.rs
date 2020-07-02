@@ -128,10 +128,10 @@ pub async fn run_loop(
                 }
                 IntermediateEvent::Rx(event, time_received) => {
                     time = Some(time_received);
-                    lorawan.handle_event(LorawanEvent::RadioEvent(
-                        radio::Event::PhyEvent(event.into()),
-                    ))
-                },
+                    lorawan.handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(
+                        event.into(),
+                    )))
+                }
                 IntermediateEvent::Timeout => lorawan.handle_event(LorawanEvent::Timeout),
             };
 
