@@ -27,18 +27,13 @@ impl<'a> From<semtech_udp::PullResp> for Event {
     }
 }
 
-impl<'a> From<semtech_udp::PullResp> for IntermediateEvent {
-    fn from(rx: semtech_udp::PullResp) -> Self {
-        IntermediateEvent::Rx(rx)
-    }
-}
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 // I need some intermediate event because of Lifetimes
 // maybe there's a cleaner way of doing this
 pub enum IntermediateEvent {
-    Rx(semtech_udp::PullResp),
+    Rx(semtech_udp::PullResp, u64),
     NewSession,
     Timeout,
     SendPacket,
@@ -107,6 +102,7 @@ pub async fn run_loop(
     loop {
         let device_ref = pretty_device(lorawan.get_credentials());
         if let Some(event) = lorawan_receiver.recv().await {
+            let mut time = None;
             let (new_state, response) = match event {
                 IntermediateEvent::NewSession => {
                     // if jitter is enabled, we'll delay 0-127 ms
@@ -130,9 +126,12 @@ pub async fn run_loop(
                     ret
 
                 }
-                IntermediateEvent::Rx(event) => lorawan.handle_event(LorawanEvent::RadioEvent(
-                    radio::Event::PhyEvent(event.into()),
-                )),
+                IntermediateEvent::Rx(event, time_received) => {
+                    time = Some(time_received);
+                    lorawan.handle_event(LorawanEvent::RadioEvent(
+                        radio::Event::PhyEvent(event.into()),
+                    ))
+                },
                 IntermediateEvent::Timeout => lorawan.handle_event(LorawanEvent::Timeout),
             };
 
@@ -144,10 +143,10 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NewSession => {
-                        debugln!("{}: Join Success {:?}", device_ref, lorawan.get_session_keys().unwrap());
+                        if let Some(time) = time {
+                            debugln!("{}: JoinSuccess [{} ms to spare] {:?}", device_ref, time, lorawan.get_session_keys().unwrap());
+                        }
                         let mut sender = lorawan_sender.clone();
-
-
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
                             sender.send(IntermediateEvent::SendPacket).await.unwrap();
@@ -174,8 +173,9 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::DataDown(fcnt_down) => {
-                        debugln!("{}: Received downlink or ACK, FcntDown = {} ", device_ref, fcnt_down);
-
+                            if let Some(t) = time {
+                                debugln!("{}: DataDown [{} ms to spare], FcntDown = {} ", device_ref, t,  fcnt_down);
+                            }
                         // if jitter is enabled, we'll delay 0-127 ms
                         let delay = transmit_delay
                             + if lorawan.get_radio().jitter {
@@ -222,6 +222,7 @@ pub async fn run_loop(
 impl UdpRadioRuntime {
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
+            // receive Semtech UDP packets from UDP Runtime
             let event = self.receiver.recv().await?;
 
             if let semtech_udp::PacketData::PullResp(data) = event.data() {
@@ -233,7 +234,7 @@ impl UdpRadioRuntime {
                         if scheduled_time > time {
                             // make units the same
                             let delay = scheduled_time - time as u64;
-                            let event = IntermediateEvent::from(data.clone());
+                            let event = IntermediateEvent::Rx(data.clone(), delay );
                             // dispatch the receive event only once its been received
                             tokio::spawn(async move {
                                 delay_for(Duration::from_millis(delay + 50)).await;
