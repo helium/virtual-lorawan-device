@@ -122,13 +122,14 @@ pub async fn run_loop(
                     lorawan.handle_event(event)
                 }
                 IntermediateEvent::SendPacket => {
-                    let data = [
-                        12, 3
-                    ];
+                    let data = [12, 3];
                     let mut ret = lorawan.send(&data, 2, true);
-                    debugln!("{}: Sending DataUp, FcntUp = {}", device_ref, ret.0.get_fcnt_up().unwrap() - 1);
+                    debugln!(
+                        "{}: Sending DataUp, FcntUp = {}",
+                        device_ref,
+                        ret.0.get_fcnt_up().unwrap() - 1
+                    );
                     ret
-
                 }
                 IntermediateEvent::Rx(event) => lorawan.handle_event(LorawanEvent::RadioEvent(
                     radio::Event::PhyEvent(event.into()),
@@ -144,9 +145,12 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NewSession => {
-                        debugln!("{}: Join Success {:?}", device_ref, lorawan.get_session_keys().unwrap());
+                        debugln!(
+                            "{}: Join Success {:?}",
+                            device_ref,
+                            lorawan.get_session_keys().unwrap()
+                        );
                         let mut sender = lorawan_sender.clone();
-
 
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
@@ -174,7 +178,11 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::DataDown(fcnt_down) => {
-                        debugln!("{}: Received downlink or ACK, FcntDown = {} ", device_ref, fcnt_down);
+                        debugln!(
+                            "{}: Received downlink or ACK, FcntDown = {} ",
+                            device_ref,
+                            fcnt_down
+                        );
 
                         // if jitter is enabled, we'll delay 0-127 ms
                         let delay = transmit_delay

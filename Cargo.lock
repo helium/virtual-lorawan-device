@@ -762,7 +762,6 @@ dependencies = [
 [[package]]
 name = "lorawan-device"
 version = "0.1.0"
-source = "git+https://github.com/helium/rust-lorawan#32b4dce795dbd117c81c15f0ae9171da75b12b2a"
 dependencies = [
  "as-slice",
  "heapless",
@@ -772,7 +771,6 @@ dependencies = [
 [[package]]
 name = "lorawan-encoding"
 version = "0.6.0-rc0"
-source = "git+https://github.com/helium/rust-lorawan#32b4dce795dbd117c81c15f0ae9171da75b12b2a"
 dependencies = [
  "aes",
  "cmac",
