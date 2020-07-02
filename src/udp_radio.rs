@@ -27,7 +27,6 @@ impl<'a> From<semtech_udp::PullResp> for Event {
     }
 }
 
-
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 // I need some intermediate event because of Lifetimes
@@ -118,13 +117,14 @@ pub async fn run_loop(
                     lorawan.handle_event(event)
                 }
                 IntermediateEvent::SendPacket => {
-                    let data = [
-                        12, 3
-                    ];
+                    let data = [12, 3, 54, 54, 123, 23, 13, 14, 15, 16];
                     let mut ret = lorawan.send(&data, 2, true);
-                    debugln!("{}: Sending DataUp, FcntUp = {}", device_ref, ret.0.get_fcnt_up().unwrap() - 1);
+                    debugln!(
+                        "{}: Sending DataUp, FcntUp = {}",
+                        device_ref,
+                        ret.0.get_fcnt_up().unwrap() - 1
+                    );
                     ret
-
                 }
                 IntermediateEvent::Rx(event, time_received) => {
                     time = Some(time_received);
@@ -143,8 +143,13 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NewSession => {
-                        if let Some(time) = time {
-                            debugln!("{}: JoinSuccess [{} ms to spare] {:?}", device_ref, time, lorawan.get_session_keys().unwrap());
+                        if let Some(t) = time {
+                            debugln!(
+                                "{}: JoinSuccess  [{} ms to spare] {:?}",
+                                device_ref,
+                                t,
+                                lorawan.get_session_keys().unwrap()
+                            );
                         }
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
@@ -173,9 +178,14 @@ pub async fn run_loop(
                         });
                     }
                     LorawanResponse::DataDown(fcnt_down) => {
-                            if let Some(t) = time {
-                                debugln!("{}: DataDown [{} ms to spare], FcntDown = {} ", device_ref, t,  fcnt_down);
-                            }
+                        if let Some(t) = time {
+                            debugln!(
+                                "{}: DataDown [{} ms to spare], FcntDown = {} ",
+                                device_ref,
+                                t,
+                                fcnt_down
+                            );
+                        }
                         // if jitter is enabled, we'll delay 0-127 ms
                         let delay = transmit_delay
                             + if lorawan.get_radio().jitter {
@@ -234,7 +244,8 @@ impl UdpRadioRuntime {
                         if scheduled_time > time {
                             // make units the same
                             let delay = scheduled_time - time as u64;
-                            let event = IntermediateEvent::Rx(data.clone(), delay );
+                            let event = IntermediateEvent::Rx(data.clone(), delay);
+
                             // dispatch the receive event only once its been received
                             tokio::spawn(async move {
                                 delay_for(Duration::from_millis(delay + 50)).await;
@@ -324,7 +335,6 @@ impl UdpRadio {
     pub async fn timer(&mut self, future_time: u32) {
         let mut sender = self.lorawan_sender.clone();
         let delay = future_time - self.time.elapsed().as_millis() as u32;
-
         tokio::spawn(async move {
             delay_for(Duration::from_millis(delay as u64)).await;
             sender.send(IntermediateEvent::Timeout).await.unwrap();
