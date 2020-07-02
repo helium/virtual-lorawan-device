@@ -152,6 +152,7 @@ pub async fn run_loop(
                             );
                         }
                         let mut sender = lorawan_sender.clone();
+
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
                             sender.send(IntermediateEvent::SendPacket).await.unwrap();
@@ -186,6 +187,7 @@ pub async fn run_loop(
                                 fcnt_down
                             );
                         }
+
                         // if jitter is enabled, we'll delay 0-127 ms
                         let delay = transmit_delay
                             + if lorawan.get_radio().jitter {
@@ -245,7 +247,6 @@ impl UdpRadioRuntime {
                             // make units the same
                             let delay = scheduled_time - time as u64;
                             let event = IntermediateEvent::Rx(data.clone(), delay);
-
                             // dispatch the receive event only once its been received
                             tokio::spawn(async move {
                                 delay_for(Duration::from_millis(delay + 50)).await;
