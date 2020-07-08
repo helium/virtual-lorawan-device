@@ -17,6 +17,7 @@ pub type TxMessage = semtech_udp::Packet;
 
 struct UdpRuntimeRx {
     sender: broadcast::Sender<RxMessage>,
+    udp_sender: Sender<TxMessage>,
     socket_recv: RecvHalf,
 }
 
@@ -90,19 +91,19 @@ impl UdpRuntime {
         let (rx_sender, _) = broadcast::channel(100);
         let (tx_sender, tx_receiver) = mpsc::channel(100);
 
-        let tx_sender_clone = tx_sender.clone();
         let (socket_recv, socket_send) = socket.split();
         Ok(UdpRuntime {
             rx: UdpRuntimeRx {
                 sender: rx_sender,
+                udp_sender: tx_sender.clone(),
                 socket_recv,
             },
+            poll_sender: tx_sender.clone(),
             tx: UdpRuntimeTx {
                 receiver: tx_receiver,
                 sender: tx_sender,
                 socket_send,
             },
-            poll_sender: tx_sender_clone,
         })
     }
 }
@@ -117,9 +118,18 @@ impl UdpRuntimeRx {
             match self.socket_recv.recv(&mut buf).await {
                 Ok(n) => {
                     let packet = semtech_udp::Packet::parse(&buf[0..n], n)?;
+
                     match packet.data() {
-                        PacketData::PullAck | PacketData::PushAck => 0,
-                        _ => self.sender.send(packet).unwrap(),
+                        PacketData::PullResp(_) => {
+                            let mut ack =
+                                semtech_udp::Packet::from_data(semtech_udp::PacketData::TxAck);
+                            ack.set_token(packet.get_token());
+                            self.udp_sender.send(ack).await?;
+                        }
+                        PacketData::PullAck | PacketData::PushAck => (),
+                        _ => {
+                            self.sender.send(packet).unwrap();
+                        }
                     };
                 }
                 Err(e) => return Err(e.into()),
@@ -136,7 +146,11 @@ impl UdpRuntimeTx {
             let tx = self.receiver.recv().await;
             if let Some(mut data) = tx {
                 data.set_gateway_mac(&mac);
-                data.set_token(super::get_random_u32() as u16);
+
+                if let PacketData::TxAck = data.data() {
+                } else {
+                    data.set_token(super::get_random_u32() as u16);
+                }
                 let n = data.serialize(&mut buf)? as usize;
                 let _sent = self.socket_send.send(&buf[..n]).await?;
             }

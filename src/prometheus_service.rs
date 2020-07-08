@@ -4,7 +4,7 @@ use hyper::{
     Body, Request, Response, Server,
 };
 use std::{fmt, sync::Mutex};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+pub use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use prometheus::{Counter, Encoder, Gauge, HistogramVec, TextEncoder};
 
@@ -12,8 +12,8 @@ static mut SENDER: Option<Mutex<Sender<Message>>> = None;
 
 #[derive(Debug)]
 pub enum Message {
-    JoinResponse,
-    DownlinkResponse,
+    DownlinkResponse(u64),
+    DownlinkTimeout,
     HttpScrape(Sender<HttpData>),
 }
 
@@ -77,9 +77,16 @@ impl Prometheus {
         ))
         .unwrap();
 
+        let fail_counter = register_counter!(opts!(
+            "packet_fail_total",
+            "Total number of fail packets",
+            labels! {"handler" => "all",}
+        ))
+        .unwrap();
+
         let histogram = register_histogram_vec!(
             "packet_reponse_time",
-            "The downlink response time in ms",
+            "Time remaining before rx timeout in secs",
             &["handler"]
         )
         .unwrap();
@@ -88,9 +95,16 @@ impl Prometheus {
             let msg = receiver.recv().await;
             if let Some(msg) = msg {
                 match msg {
+                    Message::DownlinkResponse(t) => {
+                        let in_seconds = t as f64 / 1000.0;
+                        counter.inc();
+                        histogram.with_label_values(&["all"]).observe(in_seconds)
+                    }
+                    Message::DownlinkTimeout => {
+                        fail_counter.inc();
+                    }
                     Message::HttpScrape(mut response_channel) => {
                         let encoder = TextEncoder::new();
-                        counter.inc();
                         let metric_families = prometheus::gather();
                         let mut buffer = vec![];
                         encoder.encode(&metric_families, &mut buffer).unwrap();
