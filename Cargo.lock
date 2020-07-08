@@ -1460,6 +1460,7 @@ dependencies = [
 [[package]]
 name = "semtech-udp"
 version = "0.1.0"
+source = "git+https://github.com/lthiery/semtech-udp?branch=lthiery/server#fb2e59fad660cb5e001c0bb012e27bcf2494c1ee"
 dependencies = [
  "arrayref",
  "num_enum",
