@@ -18,8 +18,7 @@ version = "0.4.1"
 
 [dependencies]
 prometheus = { git = "https://github.com/tikv/rust-prometheus.git" }
-#semtech-udp = { git = "https://github.com/lthiery/semtech-udp" }
-semtech-udp = { path = "../semtech-udp" }
+semtech-udp = { git = "https://github.com/lthiery/semtech-udp", branch = "lthiery/server"}
 lorawan-device = { git = "https://github.com/helium/rust-lorawan" }
 rand = "0.7.3"
 heapless = "0.5.4"

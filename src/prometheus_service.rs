@@ -6,7 +6,7 @@ use hyper::{
 use std::{fmt, sync::Mutex};
 pub use tokio::sync::mpsc::{self, Receiver, Sender};
 
-use prometheus::{Counter, Encoder, Gauge, HistogramVec, TextEncoder};
+use prometheus::{Encoder, TextEncoder};
 
 static mut SENDER: Option<Mutex<Sender<Message>>> = None;
 
@@ -18,7 +18,7 @@ pub enum Message {
 }
 
 #[derive(Debug)]
-struct HttpData {
+pub struct HttpData {
     format_type: String,
     data: Vec<u8>,
 }
@@ -50,7 +50,7 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, ServReqError> 
     let response = match http_receiver.recv().await {
         None => Response::builder()
             .status(408)
-            .body(Body::from(format!("Failed to get Data")))
+            .body(Body::from("Failed to get Data".to_string()))
             .unwrap(),
         Some(data) => Response::builder()
             .status(200)
@@ -116,9 +116,6 @@ impl Prometheus {
                             .await
                             .unwrap();
                     }
-                    _ => {
-                        panic!("unimplemented");
-                    }
                 }
             }
         }
@@ -150,7 +147,7 @@ impl From<hyper::Error> for ServReqError {
 }
 
 impl From<mpsc::error::SendError<Message>> for ServReqError {
-    fn from(err: mpsc::error::SendError<Message>) -> ServReqError {
+    fn from(_err: mpsc::error::SendError<Message>) -> ServReqError {
         ServReqError::ChannelFull
     }
 }
