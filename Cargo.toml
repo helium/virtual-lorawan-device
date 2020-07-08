@@ -17,6 +17,7 @@ version = "=0.13.6"
 version = "0.4.1"
 
 [dependencies]
+prometheus = { git = "https://github.com/tikv/rust-prometheus.git" }
 semtech-udp = { git = "https://github.com/lthiery/semtech-udp" }
 lorawan-device = { git = "https://github.com/helium/rust-lorawan" }
 rand = "0.7.3"
