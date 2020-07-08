@@ -21,6 +21,10 @@ pub struct Opt {
     #[structopt(short, long, default_value = "32")]
     pub max_devices: usize,
 
+    /// Whether to put up a Prometheus service to be scraped
+    #[structopt(short, long)]
+    pub prometheus: bool,
+
     /// Choose command to run
     #[structopt(subcommand)]
     pub command: Option<Command>,

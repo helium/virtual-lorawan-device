@@ -41,7 +41,7 @@ pub struct Device {
 impl Device {
     pub fn from_console_device(oui: usize, device: console::Device) -> Device {
         Device {
-            transmit_delay: 0,
+            transmit_delay: 500,
             oui,
             credentials: Credentials {
                 app_eui: device.app_eui().to_string(),

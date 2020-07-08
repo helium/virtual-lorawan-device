@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate prometheus;
 
 mod udp_runtime;
 use udp_runtime::UdpRuntime;
@@ -8,6 +10,8 @@ use udp_radio::UdpRadio;
 mod cli;
 use cli::*;
 mod config;
+
+mod prometheus_service;
 
 use {
     lorawan_device::Device as LoRaWanDevice,
@@ -55,6 +59,16 @@ macro_rules! debugln {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Opt::from_args();
+    let prometheus = if cli.prometheus {
+        let (sender_channel, service) = prometheus_service::Prometheus::new();
+        tokio::spawn(async move {
+            service.run().await.unwrap();
+        });
+        Some(sender_channel)
+    } else {
+        None
+    };
+
     if let Err(e) = run(cli).await {
         println!("error: {}", e);
         process::exit(1);
