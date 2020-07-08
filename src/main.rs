@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    if let Err(e) = run(cli).await {
+    if let Err(e) = run(cli, prometheus).await {
         println!("error: {}", e);
         process::exit(1);
     }
@@ -82,7 +82,10 @@ lazy_static! {
 
 const CONSOLE_CREDENTIALS_PATH: &str = "console-credentials.json";
 
-async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
+async fn run<'a>(
+    opt: Opt,
+    prometheus: Option<prometheus_service::Sender<prometheus_service::Message>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let devices = if let Some(cmd) = opt.command {
         let Command::Console { cmd } = cmd;
         let clients = config::load_console_client(CONSOLE_CREDENTIALS_PATH)?;
@@ -177,10 +180,22 @@ async fn run<'a>(opt: Opt) -> Result<(), Box<dyn std::error::Error>> {
             get_random_u32,
         );
 
+        let prom_sender = if let Some(sender) = &prometheus {
+            Some(sender.clone())
+        } else {
+            None
+        };
+
         tokio::spawn(async move {
-            udp_radio::run_loop(lorawan_receiver, lorawan_sender, lorawan, transmit_delay)
-                .await
-                .unwrap();
+            udp_radio::run_loop(
+                lorawan_receiver,
+                lorawan_sender,
+                lorawan,
+                prom_sender,
+                transmit_delay,
+            )
+            .await
+            .unwrap();
         });
     }
 

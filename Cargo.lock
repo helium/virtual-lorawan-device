@@ -1460,12 +1460,13 @@ dependencies = [
 [[package]]
 name = "semtech-udp"
 version = "0.1.0"
-source = "git+https://github.com/lthiery/semtech-udp#7a8b06d6e899db71f94f5554aac1e907c463dffd"
 dependencies = [
  "arrayref",
  "num_enum",
+ "rand 0.7.3",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

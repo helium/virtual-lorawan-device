@@ -1,5 +1,5 @@
 #![macro_use]
-use super::{debugln, udp_runtime, INSTANT};
+use super::{debugln, prometheus_service as prometheus, udp_runtime, INSTANT};
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use lorawan_device::{
@@ -92,6 +92,7 @@ pub async fn run_loop(
     mut lorawan_receiver: Receiver<IntermediateEvent>,
     mut lorawan_sender: Sender<IntermediateEvent>,
     mut lorawan: LorawanDevice<UdpRadio>,
+    mut prometheus: Option<Sender<prometheus::Message>>,
     transmit_delay: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     lorawan_sender
@@ -161,6 +162,10 @@ pub async fn run_loop(
                     LorawanResponse::Idle => (),
                     LorawanResponse::NoAck => {
                         debugln!("{}: NoAck", device_ref);
+                        if let Some(ref mut sender) = prometheus {
+                            sender.send(prometheus::Message::DownlinkTimeout).await?
+                        }
+
                         let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(transmit_delay as u64)).await;
@@ -186,6 +191,11 @@ pub async fn run_loop(
                                 t,
                                 fcnt_down
                             );
+                            if let Some(ref mut sender) = prometheus {
+                                sender
+                                    .send(prometheus::Message::DownlinkResponse(t))
+                                    .await?
+                            }
                         }
 
                         // if jitter is enabled, we'll delay 0-127 ms
