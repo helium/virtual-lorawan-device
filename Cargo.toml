@@ -17,8 +17,8 @@ version = "=0.13.6"
 version = "0.4.1"
 
 [dependencies]
-prometheus = { git = "https://github.com/tikv/rust-prometheus.git" }
-semtech-udp = { git = "https://github.com/lthiery/semtech-udp", branch = "lthiery/server"}
+prometheus = { version = "0.9.0" }
+semtech-udp = { version = "0.2.0" }
 lorawan-device = { git = "https://github.com/helium/rust-lorawan" }
 rand = "0.7.3"
 heapless = "0.5.4"
