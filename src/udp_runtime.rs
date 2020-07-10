@@ -3,7 +3,7 @@
    run sending and receiving concurrently as tasks,
    receive downlink packets and send uplink packets easily
 */
-use semtech_udp::PacketData;
+use semtech_udp::{parser::Parser, pull_data, Down, MacAddress, Packet, SerializablePacket, Up};
 use std::net::SocketAddr;
 use tokio::net::udp::{RecvHalf, SendHalf};
 use tokio::net::UdpSocket;
@@ -68,9 +68,8 @@ impl UdpRuntime {
         // spawn a timer for telling tx to send a PullReq frame
         tokio::spawn(async move {
             loop {
-                let packet = semtech_udp::Packet::from_data(semtech_udp::PacketData::PullData);
-
-                if let Err(e) = poll_sender.send(packet).await {
+                let packet = pull_data::Packet::default();
+                if let Err(e) = poll_sender.send(packet.into()).await {
                     panic!("UdpRuntime error from sending PullData {}", e)
                 }
                 delay_for(Duration::from_millis(10000)).await;
@@ -118,19 +117,15 @@ impl UdpRuntimeRx {
             match self.socket_recv.recv(&mut buf).await {
                 Ok(n) => {
                     let packet = semtech_udp::Packet::parse(&buf[0..n], n)?;
-
-                    match packet.data() {
-                        PacketData::PullResp(_) => {
-                            let mut ack =
-                                semtech_udp::Packet::from_data(semtech_udp::PacketData::TxAck);
-                            ack.set_token(packet.get_token());
-                            self.udp_sender.send(ack).await?;
-                        }
-                        PacketData::PullAck | PacketData::PushAck => (),
-                        _ => {
-                            self.sender.send(packet).unwrap();
-                        }
-                    };
+                    match packet {
+                        Packet::Up(_) => panic!("Should not be receiving any up packets"),
+                        Packet::Down(down) => match down {
+                            Down::PullResp(pull_resp) => {
+                                self.udp_sender.send(pull_resp.into_ack().into()).await?;
+                            }
+                            Down::PullAck(_) | Down::PushAck(_) => (),
+                        },
+                    }
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -145,12 +140,23 @@ impl UdpRuntimeTx {
         loop {
             let tx = self.receiver.recv().await;
             if let Some(mut data) = tx {
-                data.set_gateway_mac(&mac);
+                match &mut data {
+                    Packet::Up(ref mut up) => {
+                        up.set_gateway_mac(MacAddress::new(&mac));
 
-                if let PacketData::TxAck = data.data() {
-                } else {
-                    data.set_token(super::get_random_u32() as u16);
+                        match up {
+                            Up::PushData(ref mut push_data) => {
+                                push_data.random_token = super::get_random_u32() as u16;
+                            }
+                            Up::PullData(_) => (),
+                            Up::TxAck(ref mut tx_ack) => {
+                                tx_ack.random_token = super::get_random_u32() as u16;
+                            }
+                        }
+                    }
+                    Packet::Down(_) => panic!("Should not be sending any down packets"),
                 }
+
                 let n = data.serialize(&mut buf)? as usize;
                 let _sent = self.socket_send.send(&buf[..n]).await?;
             }

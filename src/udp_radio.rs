@@ -6,7 +6,7 @@ use lorawan_device::{
     self as lorawan, radio, Device as LorawanDevice, Event as LorawanEvent,
     Response as LorawanResponse, Timings,
 };
-use semtech_udp::{PacketData, PushData, RxPk, StringOrNum};
+use semtech_udp::{push_data, push_data::RxPk, Down, Packet, StringOrNum};
 use std::time::Duration;
 use tokio::sync::{
     broadcast,
@@ -16,23 +16,21 @@ use tokio::time::delay_for;
 
 #[derive(Debug)]
 #[allow(dead_code)]
-#[allow(clippy::large_enum_variant)]
 pub enum Event {
-    Rx(semtech_udp::PullResp),
+    Rx(Box<semtech_udp::pull_resp::Packet>),
 }
 
-impl<'a> From<semtech_udp::PullResp> for Event {
-    fn from(rx: semtech_udp::PullResp) -> Self {
+impl<'a> From<Box<semtech_udp::pull_resp::Packet>> for Event {
+    fn from(rx: Box<semtech_udp::pull_resp::Packet>) -> Self {
         Event::Rx(rx)
     }
 }
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
 // I need some intermediate event because of Lifetimes
 // maybe there's a cleaner way of doing this
 pub enum IntermediateEvent {
-    Rx(semtech_udp::PullResp, u64),
+    Rx(Box<semtech_udp::pull_resp::Packet>, u64),
     NewSession,
     Timeout,
     SendPacket,
@@ -127,10 +125,10 @@ pub async fn run_loop(
                     );
                     ret
                 }
-                IntermediateEvent::Rx(event, time_received) => {
+                IntermediateEvent::Rx(packet, time_received) => {
                     time = Some(time_received);
                     lorawan.handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(
-                        event.into(),
+                        packet.into(),
                     )))
                 }
                 IntermediateEvent::Timeout => lorawan.handle_event(LorawanEvent::Timeout),
@@ -247,16 +245,16 @@ impl UdpRadioRuntime {
             // receive Semtech UDP packets from UDP Runtime
             let event = self.receiver.recv().await?;
 
-            if let semtech_udp::PacketData::PullResp(data) = event.data() {
+            if let Packet::Down(Down::PullResp(pull_resp)) = event {
                 let mut sender = self.lorawan_sender.clone();
-                match &data.txpk.tmst {
+                match &pull_resp.data.txpk.tmst {
                     StringOrNum::N(n) => {
                         let scheduled_time = n / 1000;
                         let time = self.time.elapsed().as_millis() as u64;
                         if scheduled_time > time {
                             // make units the same
                             let delay = scheduled_time - time as u64;
-                            let event = IntermediateEvent::Rx(data.clone(), delay);
+                            let event = IntermediateEvent::Rx(pull_resp.clone(), delay);
                             // dispatch the receive event only once its been received
                             tokio::spawn(async move {
                                 delay_for(Duration::from_millis(delay + 50)).await;
@@ -381,31 +379,24 @@ impl radio::PhyRxTx for UdpRadio {
 
                 let settings = Settings::from(tx_config);
 
-                let mut packet = Vec::new();
-                packet.push({
-                    RxPk {
-                        chan: 0,
-                        codr: settings.get_codr(),
-                        data,
-                        datr: settings.get_datr(),
-                        freq: settings.get_freq(),
-                        lsnr: 5.5,
-                        modu: "LORA".to_string(),
-                        rfch: 0,
-                        rssi: -112,
-                        size,
-                        stat: 1,
-                        tmst,
-                    }
-                });
-                let rxpk = Some(packet);
+                let rxpk = RxPk {
+                    chan: 0,
+                    codr: settings.get_codr(),
+                    data,
+                    datr: settings.get_datr(),
+                    freq: settings.get_freq(),
+                    lsnr: 5.5,
+                    modu: "LORA".to_string(),
+                    rfch: 0,
+                    rssi: -112,
+                    size,
+                    stat: 1,
+                    tmst,
+                };
 
-                let packet = semtech_udp::Packet::from_data(PacketData::PushData(PushData {
-                    rxpk,
-                    stat: None,
-                }));
+                let packet = push_data::Packet::from_rxpk(rxpk);
 
-                if let Err(e) = self.sender.try_send(packet) {
+                if let Err(e) = self.sender.try_send(packet.into()) {
                     panic!("UdpTx Queue Overflow! {}", e)
                 }
 
@@ -419,7 +410,7 @@ impl radio::PhyRxTx for UdpRadio {
             }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
             radio::Event::PhyEvent(udp_event) => match udp_event {
-                Event::Rx(pkt) => match base64::decode(pkt.txpk.data) {
+                Event::Rx(pkt) => match base64::decode(pkt.data.txpk.data) {
                     Ok(data) => {
                         self.rx_buffer.clear();
                         for el in data {
