@@ -119,8 +119,11 @@ impl UdpRuntimeRx {
                     let packet = semtech_udp::Packet::parse(&buf[0..n], n)?;
                     match packet {
                         Packet::Up(_) => panic!("Should not be receiving any up packets"),
-                        Packet::Down(down) => match down {
+                        Packet::Down(down) => match down.clone() {
                             Down::PullResp(pull_resp) => {
+                                // send downlinks to LoRaWAN layer
+                                self.sender.send(pull_resp.clone().into()).unwrap();
+                                // provide ACK
                                 self.udp_sender.send(pull_resp.into_ack().into()).await?;
                             }
                             Down::PullAck(_) | Down::PushAck(_) => (),

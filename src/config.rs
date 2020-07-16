@@ -11,6 +11,10 @@ pub struct Credentials {
 }
 
 impl Credentials {
+    pub fn deveui(&self) -> &String {
+        &self.dev_eui
+    }
+
     pub fn appeui_cloned_into_buf(&self) -> Result<[u8; 8], Box<dyn std::error::Error>> {
         let vec = hex::decode(&self.app_eui)?;
         Ok([
@@ -38,6 +42,7 @@ pub struct Device {
     oui: usize,
     credentials: Credentials,
 }
+
 impl Device {
     pub fn from_console_device(oui: usize, device: console::Device) -> Device {
         Device {
@@ -49,6 +54,9 @@ impl Device {
                 dev_eui: device.dev_eui().to_string(),
             },
         }
+    }
+    pub fn oui(&self) -> usize {
+        self.oui
     }
     pub fn credentials(&self) -> &Credentials {
         &self.credentials

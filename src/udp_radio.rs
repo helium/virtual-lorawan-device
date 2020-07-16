@@ -1,5 +1,7 @@
 #![macro_use]
-use super::{debugln, prometheus_service as prometheus, udp_runtime, INSTANT};
+use super::{
+    debugln, prometheus_service as prometheus, prometheus_service::Stat, udp_runtime, INSTANT,
+};
 use heapless::consts::*;
 use heapless::Vec as HVec;
 use lorawan_device::{
@@ -161,7 +163,9 @@ pub async fn run_loop(
                     LorawanResponse::NoAck => {
                         debugln!("{}: NoAck", device_ref);
                         if let Some(ref mut sender) = prometheus {
-                            sender.send(prometheus::Message::DownlinkTimeout).await?
+                            sender
+                                .send(prometheus::Message::Stat(device_ref, Stat::DownlinkTimeout))
+                                .await?
                         }
 
                         let mut sender = lorawan_sender.clone();
@@ -191,7 +195,10 @@ pub async fn run_loop(
                             );
                             if let Some(ref mut sender) = prometheus {
                                 sender
-                                    .send(prometheus::Message::DownlinkResponse(t))
+                                    .send(prometheus::Message::Stat(
+                                        device_ref,
+                                        Stat::DownlinkResponse(t),
+                                    ))
                                     .await?
                             }
                         }
@@ -393,7 +400,6 @@ impl radio::PhyRxTx for UdpRadio {
                     stat: 1,
                     tmst,
                 };
-
                 let packet = push_data::Packet::from_rxpk(rxpk);
 
                 if let Err(e) = self.sender.try_send(packet.into()) {
@@ -410,7 +416,7 @@ impl radio::PhyRxTx for UdpRadio {
             }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
             radio::Event::PhyEvent(udp_event) => match udp_event {
-                Event::Rx(pkt) => match base64::decode(pkt.data.txpk.data) {
+                Event::Rx(pkt) => match base64::decode(&pkt.data.txpk.data) {
                     Ok(data) => {
                         self.rx_buffer.clear();
                         for el in data {
