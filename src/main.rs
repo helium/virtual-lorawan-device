@@ -15,6 +15,7 @@ mod prometheus_service;
 
 use {
     lorawan_device::Device as LoRaWanDevice,
+    prometheus_service::PrometheusBuilder,
     rand::Rng,
     std::{
         net::SocketAddr,
@@ -60,11 +61,7 @@ macro_rules! debugln {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Opt::from_args();
     let prometheus = if cli.prometheus {
-        let (sender_channel, service) = prometheus_service::Prometheus::new();
-        tokio::spawn(async move {
-            service.run().await.unwrap();
-        });
-        Some(sender_channel)
+        Some(PrometheusBuilder::new())
     } else {
         None
     };
@@ -84,7 +81,7 @@ const CONSOLE_CREDENTIALS_PATH: &str = "console-credentials.json";
 
 async fn run<'a>(
     opt: Opt,
-    prometheus: Option<prometheus_service::Sender<prometheus_service::Message>>,
+    mut prometheus: Option<PrometheusBuilder>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let devices = if let Some(cmd) = opt.command {
         let Command::Console { cmd } = cmd;
@@ -180,8 +177,9 @@ async fn run<'a>(
             get_random_u32,
         );
 
-        let prom_sender = if let Some(sender) = &prometheus {
-            Some(sender.clone())
+        let prom_sender = if let Some(prometheus) = &mut prometheus {
+            prometheus.register(&device);
+            Some(prometheus.get_sender())
         } else {
             None
         };
@@ -196,6 +194,14 @@ async fn run<'a>(
             )
             .await
             .unwrap();
+        });
+    }
+
+    if let Some(prometheus) = prometheus {
+        let server = prometheus.build();
+
+        tokio::spawn(async move {
+            server.run().await.unwrap();
         });
     }
 

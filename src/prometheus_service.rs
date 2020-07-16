@@ -6,15 +6,20 @@ use hyper::{
 use std::{fmt, sync::Mutex};
 pub use tokio::sync::mpsc::{self, Receiver, Sender};
 
-use prometheus::{Encoder, TextEncoder};
+use prometheus::{CounterVec, Encoder, HistogramVec, TextEncoder};
 
 static mut SENDER: Option<Mutex<Sender<Message>>> = None;
 
 #[derive(Debug)]
 pub enum Message {
+    Stat(String, Stat),
+    HttpScrape(Sender<HttpData>),
+}
+
+#[derive(Debug)]
+pub enum Stat {
     DownlinkResponse(u64),
     DownlinkTimeout,
-    HttpScrape(Sender<HttpData>),
 }
 
 #[derive(Debug)]
@@ -26,6 +31,7 @@ pub struct HttpData {
 pub struct Prometheus {
     sender: Sender<Message>,
     receiver: Receiver<Message>,
+    stats: Stats,
 }
 
 #[derive(Debug)]
@@ -62,46 +68,130 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, ServReqError> 
     Ok(response)
 }
 
-impl Prometheus {
-    pub fn new() -> (Sender<Message>, Self) {
+struct Stats {
+    data_success: CounterVec,
+    data_fail: CounterVec,
+    data_response_buffer: HistogramVec,
+    join_success: CounterVec,
+    join_fail: CounterVec,
+    join_response_buffer: HistogramVec,
+}
+
+pub struct PrometheusBuilder {
+    production_devices: Vec<String>,
+    staging_devices: Vec<String>,
+    sender: Sender<Message>,
+    receiver: Receiver<Message>,
+}
+
+impl PrometheusBuilder {
+    pub fn new() -> PrometheusBuilder {
         let (sender, receiver) = mpsc::channel(100);
 
-        (sender.clone(), Prometheus { sender, receiver })
+        PrometheusBuilder {
+            production_devices: Vec::new(),
+            staging_devices: Vec::new(),
+            sender,
+            receiver,
+        }
     }
 
-    async fn receiver_loop(mut receiver: Receiver<Message>) {
-        let counter = register_counter!(opts!(
-            "packet_sent_total",
-            "Total number of packets sent",
-            labels! {"handler" => "all",}
-        ))
-        .unwrap();
+    pub fn get_sender(&self) -> Sender<Message> {
+        self.sender.clone()
+    }
 
-        let fail_counter = register_counter!(opts!(
-            "packet_fail_total",
-            "Total number of fail packets",
-            labels! {"handler" => "all",}
-        ))
-        .unwrap();
+    pub fn register(&mut self, device: &super::config::Device) {
+        let label = format!("_{}", &device.credentials().deveui()[12..]);
 
-        let histogram = register_histogram_vec!(
-            "packet_reponse_time",
-            "Time remaining before rx timeout in secs",
-            &["handler"]
+        if device.oui() == 1 {
+            self.production_devices.push(label);
+        } else if device.oui() == 2 {
+            self.staging_devices.push(label);
+        } else {
+            panic!("Invalid OUI");
+        }
+    }
+
+    pub fn build(self) -> Prometheus {
+        let data_success = register_counter_vec!(
+            opts!("data_success", "Total number of packets sent"),
+            &["device"]
         )
         .unwrap();
 
+        let data_fail = register_counter_vec!(
+            opts!("data_fail", "Total number of fail packets"),
+            &["device"]
+        )
+        .unwrap();
+
+        let data_response_buffer = register_histogram_vec!(
+            "data_response_buffer",
+            "Time remaining before timeout",
+            &["device"],
+            vec![0.1, 0.20, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        )
+        .unwrap();
+
+        let join_success = register_counter_vec!(
+            opts!("join_success", "Total number of packets sent"),
+            &["device"]
+        )
+        .unwrap();
+
+        let join_fail = register_counter_vec!(
+            opts!("join_fail", "Total number of fail packets"),
+            &["device"]
+        )
+        .unwrap();
+
+        let join_response_buffer = register_histogram_vec!(
+            "join_response_buffer",
+            "Time remaining before rx timeout in secs",
+            &["device"],
+            vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
+        )
+        .unwrap();
+
+        let stats = Stats {
+            data_success,
+            data_fail,
+            data_response_buffer,
+            join_success,
+            join_fail,
+            join_response_buffer,
+        };
+
+        Prometheus {
+            sender: self.sender,
+            receiver: self.receiver,
+            stats,
+        }
+    }
+}
+
+impl Prometheus {
+    async fn receiver_loop(stats: Stats, mut receiver: Receiver<Message>) {
         loop {
             let msg = receiver.recv().await;
             if let Some(msg) = msg {
                 match msg {
-                    Message::DownlinkResponse(t) => {
-                        let in_seconds = t as f64 / 1000.0;
-                        counter.inc();
-                        histogram.with_label_values(&["all"]).observe(in_seconds)
-                    }
-                    Message::DownlinkTimeout => {
-                        fail_counter.inc();
+                    Message::Stat(mut device_ref, stat) => {
+                        device_ref.insert(0, '_');
+                        let label = vec![device_ref.as_str()];
+                        match stat {
+                            Stat::DownlinkResponse(t) => {
+                                let in_seconds = t as f64 / 1000.0;
+                                stats
+                                    .data_response_buffer
+                                    .with_label_values(label.as_slice())
+                                    .observe(in_seconds);
+                                stats.data_success.with_label_values(label.as_slice()).inc();
+                            }
+                            Stat::DownlinkTimeout => {
+                                stats.data_fail.with_label_values(label.as_slice()).inc();
+                            }
+                        }
                     }
                     Message::HttpScrape(mut response_channel) => {
                         let encoder = TextEncoder::new();
@@ -127,7 +217,7 @@ impl Prometheus {
             SENDER = Some(Mutex::new(self.sender.clone()));
         }
 
-        tokio::spawn(async move { Self::receiver_loop(self.receiver).await });
+        tokio::spawn(async move { Self::receiver_loop(self.stats, self.receiver).await });
 
         let addr = ([0, 0, 0, 0], 9091).into();
         println!("Listening on http://{}", addr);
