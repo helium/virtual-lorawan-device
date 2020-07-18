@@ -143,6 +143,13 @@ pub async fn run_loop(
                     LorawanResponse::TimeoutRequest(delay) => {
                         lorawan.get_radio().timer(delay).await;
                     }
+                    LorawanResponse::NoJoinAccept => {
+                        // if the Join Request failed try again
+                        lorawan_sender
+                            .send(IntermediateEvent::NewSession)
+                            .await
+                            .unwrap();
+                    }
                     LorawanResponse::NewSession => {
                         if let Some(t) = time {
                             debugln!(
