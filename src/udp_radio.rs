@@ -1,6 +1,7 @@
 #![macro_use]
 use super::{
-    debugln, prometheus_service as prometheus, prometheus_service::Stat, udp_runtime, INSTANT,
+    config, debugln, prometheus_service as prometheus, prometheus_service::Stat, udp_runtime,
+    INSTANT,
 };
 use heapless::consts::*;
 use heapless::Vec as HVec;
@@ -88,12 +89,46 @@ pub fn pretty_device(creds: &lorawan::Credentials) -> String {
     hex.to_uppercase()[12..].to_string()
 }
 
+pub async fn need_to_schedule_packet(
+    lorawan_sender: &mut Sender<IntermediateEvent>,
+    lorawan: &mut LorawanDevice<UdpRadio>,
+    fcnt_before_rejoin: Option<usize>,
+) -> bool {
+    if let (Some(fcnt_threshold), Some(fcnt)) = (fcnt_before_rejoin, lorawan.get_fcnt_up()) {
+        if fcnt == fcnt_threshold as u32 {
+            lorawan_sender
+                .send(IntermediateEvent::NewSession)
+                .await
+                .unwrap();
+            return false;
+        }
+    }
+    true
+}
+
+pub async fn schedule_packet(
+    lorawan_sender: &mut Sender<IntermediateEvent>,
+    lorawan: &mut LorawanDevice<UdpRadio>,
+    transmit_delay: u64,
+) {
+    let delay = if lorawan.get_radio().jitter {
+        (super::get_random_u32() & 0x7F) as u64
+    } else {
+        0
+    };
+
+    let mut sender = lorawan_sender.clone();
+    tokio::spawn(async move {
+        delay_for(Duration::from_millis(transmit_delay as u64 + delay)).await;
+        sender.send(IntermediateEvent::SendPacket).await.unwrap();
+    });
+}
+
 pub async fn run_loop(
     mut lorawan_receiver: Receiver<IntermediateEvent>,
     mut lorawan_sender: Sender<IntermediateEvent>,
     mut lorawan: LorawanDevice<UdpRadio>,
     mut prometheus: Option<Sender<prometheus::Message>>,
-    transmit_delay: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
@@ -101,6 +136,9 @@ pub async fn run_loop(
 
     loop {
         let device_ref = pretty_device(lorawan.get_credentials());
+        let transmit_delay = lorawan.get_radio().config.transmit_delay();
+        let fcnt_before_rejoin = lorawan.get_radio().config.fcnt_before_rejoin();
+
         if let Some(event) = lorawan_receiver.recv().await {
             let mut time = None;
             let (new_state, response) = match event {
@@ -151,8 +189,12 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NoJoinAccept => {
-                        debugln!("{}: No JoinAccept Received", device_ref,);
-
+                        debugln!("{}: No JoinAccept Received", device_ref);
+                        if let Some(ref mut sender) = prometheus {
+                            sender
+                                .send(prometheus::Message::Stat(device_ref, Stat::JoinTimeout))
+                                .await?
+                        }
                         // if the Join Request failed try again
                         lorawan_sender
                             .send(IntermediateEvent::NewSession)
@@ -167,13 +209,16 @@ pub async fn run_loop(
                                 t,
                                 lorawan.get_session_keys().unwrap()
                             );
+                            if let Some(ref mut sender) = prometheus {
+                                sender
+                                    .send(prometheus::Message::Stat(
+                                        device_ref,
+                                        Stat::JoinResponse(t),
+                                    ))
+                                    .await?
+                            }
                         }
-                        let mut sender = lorawan_sender.clone();
-
-                        tokio::spawn(async move {
-                            delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                            sender.send(IntermediateEvent::SendPacket).await.unwrap();
-                        });
+                        schedule_packet(&mut lorawan_sender, &mut lorawan, transmit_delay).await;
                     }
                     LorawanResponse::Idle => (),
                     LorawanResponse::NoAck => {
@@ -195,11 +240,7 @@ pub async fn run_loop(
                             "{}: No downlink received but none expected - ready to send again",
                             device_ref
                         );
-                        let mut sender = lorawan_sender.clone();
-                        tokio::spawn(async move {
-                            delay_for(Duration::from_millis(transmit_delay as u64)).await;
-                            sender.send(IntermediateEvent::SendPacket).await.unwrap();
-                        });
+                        schedule_packet(&mut lorawan_sender, &mut lorawan, transmit_delay).await;
                     }
                     LorawanResponse::DataDown(fcnt_down) => {
                         if let Some(t) = time {
@@ -219,20 +260,16 @@ pub async fn run_loop(
                             }
                         }
 
-                        let mut sender = lorawan_sender.clone();
-
-                        // if jitter is enabled, we'll delay 0-127 ms
-                        let delay = transmit_delay
-                            + if lorawan.get_radio().jitter {
-                                (super::get_random_u32() & 0x7F) as u64
-                            } else {
-                                0
-                            };
-
-                        tokio::spawn(async move {
-                            delay_for(Duration::from_millis(delay as u64)).await;
-                            sender.send(IntermediateEvent::SendPacket).await.unwrap();
-                        });
+                        if need_to_schedule_packet(
+                            &mut lorawan_sender,
+                            &mut lorawan,
+                            fcnt_before_rejoin,
+                        )
+                        .await
+                        {
+                            schedule_packet(&mut lorawan_sender, &mut lorawan, transmit_delay)
+                                .await;
+                        }
                     }
                     LorawanResponse::Rxing => {
                         debugln!("{}: Receiving", device_ref);
@@ -325,6 +362,7 @@ pub struct UdpRadio {
     window_start: u32,
     jitter: bool,
     timeout_id: u32,
+    config: config::Device,
 }
 
 impl UdpRadio {
@@ -332,6 +370,7 @@ impl UdpRadio {
         sender: Sender<udp_runtime::TxMessage>,
         receiver: broadcast::Receiver<udp_runtime::RxMessage>,
         time: Instant,
+        config: config::Device,
     ) -> (
         Receiver<IntermediateEvent>,
         UdpRadioRuntime,
@@ -360,6 +399,7 @@ impl UdpRadio {
                 window_start: 0,
                 jitter: true,
                 timeout_id: 0,
+                config,
             },
         )
     }
