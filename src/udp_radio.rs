@@ -144,6 +144,11 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NoJoinAccept => {
+                        debugln!(
+                                "{}: No JoinAccept Received",
+                                device_ref,
+                        );
+
                         // if the Join Request failed try again
                         lorawan_sender
                             .send(IntermediateEvent::NewSession)
