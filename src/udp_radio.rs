@@ -34,7 +34,7 @@ impl<'a> From<Box<semtech_udp::pull_resp::Packet>> for Event {
 pub enum IntermediateEvent {
     Rx(Box<semtech_udp::pull_resp::Packet>, u64),
     NewSession,
-    Timeout,
+    Timeout(u32),
     SendPacket,
 }
 
@@ -111,7 +111,8 @@ pub async fn run_loop(
                     } else {
                         0
                     };
-                    delay_for(Duration::from_millis(delay as u64)).await;
+
+                    delay_for(Duration::from_millis(1000 + delay as u64)).await;
 
                     debugln!("{}: Creating Session", device_ref);
                     let event = LorawanEvent::NewSession;
@@ -133,7 +134,13 @@ pub async fn run_loop(
                         packet.into(),
                     )))
                 }
-                IntermediateEvent::Timeout => lorawan.handle_event(LorawanEvent::Timeout),
+                IntermediateEvent::Timeout(id) => {
+                    if lorawan.get_radio().most_recent_timeout(id) {
+                        lorawan.handle_event(LorawanEvent::Timeout)
+                    } else {
+                        (lorawan, Ok(LorawanResponse::Idle))
+                    }
+                }
             };
 
             lorawan = new_state;
@@ -144,10 +151,7 @@ pub async fn run_loop(
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NoJoinAccept => {
-                        debugln!(
-                                "{}: No JoinAccept Received",
-                                device_ref,
-                        );
+                        debugln!("{}: No JoinAccept Received", device_ref,);
 
                         // if the Join Request failed try again
                         lorawan_sender
@@ -215,6 +219,8 @@ pub async fn run_loop(
                             }
                         }
 
+                        let mut sender = lorawan_sender.clone();
+
                         // if jitter is enabled, we'll delay 0-127 ms
                         let delay = transmit_delay
                             + if lorawan.get_radio().jitter {
@@ -223,7 +229,6 @@ pub async fn run_loop(
                                 0
                             };
 
-                        let mut sender = lorawan_sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_millis(delay as u64)).await;
                             sender.send(IntermediateEvent::SendPacket).await.unwrap();
@@ -319,6 +324,7 @@ pub struct UdpRadio {
     time: Instant,
     window_start: u32,
     jitter: bool,
+    timeout_id: u32,
 }
 
 impl UdpRadio {
@@ -353,19 +359,30 @@ impl UdpRadio {
                 time,
                 window_start: 0,
                 jitter: true,
+                timeout_id: 0,
             },
         )
     }
+
     pub fn disable_jitter(&mut self) {
         self.jitter = false;
     }
 
+    pub fn most_recent_timeout(&mut self, timeout_id: u32) -> bool {
+        self.timeout_id == timeout_id
+    }
+
     pub async fn timer(&mut self, future_time: u32) {
+        let timeout_id = super::get_random_u32();
+        self.timeout_id = timeout_id;
         let mut sender = self.lorawan_sender.clone();
         let delay = future_time - self.time.elapsed().as_millis() as u32;
         tokio::spawn(async move {
             delay_for(Duration::from_millis(delay as u64)).await;
-            sender.send(IntermediateEvent::Timeout).await.unwrap();
+            sender
+                .send(IntermediateEvent::Timeout(timeout_id))
+                .await
+                .unwrap();
         });
         self.window_start = delay;
     }
