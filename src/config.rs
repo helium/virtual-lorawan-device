@@ -40,12 +40,14 @@ impl Credentials {
 pub struct Device {
     transmit_delay: usize,
     oui: usize,
+    fcnt_before_rejoin: Option<usize>,
     credentials: Credentials,
 }
 
 impl Device {
     pub fn from_console_device(oui: usize, device: console::Device) -> Device {
         Device {
+            fcnt_before_rejoin: None,
             transmit_delay: 500,
             oui,
             credentials: Credentials {
@@ -63,6 +65,9 @@ impl Device {
     }
     pub fn transmit_delay(&self) -> u64 {
         self.transmit_delay as u64
+    }
+    pub fn fcnt_before_rejoin(&self) -> Option<usize> {
+        self.fcnt_before_rejoin
     }
 }
 

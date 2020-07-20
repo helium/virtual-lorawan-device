@@ -156,8 +156,12 @@ async fn run<'a>(
     for device in devices {
         // UdpRadio implements the LoRaWAN device Radio trait
         // use it by sending requested via the lorawan_sender
-        let (lorawan_receiver, mut radio_runtime, lorawan_sender, mut radio) =
-            UdpRadio::new(udp_runtime.publish_to(), udp_runtime.subscribe(), *INSTANT);
+        let (lorawan_receiver, mut radio_runtime, lorawan_sender, mut radio) = UdpRadio::new(
+            udp_runtime.publish_to(),
+            udp_runtime.subscribe(),
+            *INSTANT,
+            device.clone(),
+        );
 
         // disable jitter by default if there is only one device
         if opt.disable_jitter || num_devices == 1 {
@@ -168,7 +172,6 @@ async fn run<'a>(
             radio_runtime.run().await.unwrap();
         });
 
-        let transmit_delay = device.transmit_delay();
         let lorawan = LoRaWanDevice::new(
             radio,
             device.credentials().deveui_cloned_into_buf()?,
@@ -185,15 +188,9 @@ async fn run<'a>(
         };
 
         tokio::spawn(async move {
-            udp_radio::run_loop(
-                lorawan_receiver,
-                lorawan_sender,
-                lorawan,
-                prom_sender,
-                transmit_delay,
-            )
-            .await
-            .unwrap();
+            udp_radio::run_loop(lorawan_receiver, lorawan_sender, lorawan, prom_sender)
+                .await
+                .unwrap();
         });
     }
 

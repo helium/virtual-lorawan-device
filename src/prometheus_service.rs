@@ -20,6 +20,8 @@ pub enum Message {
 pub enum Stat {
     DownlinkResponse(u64),
     DownlinkTimeout,
+    JoinResponse(u64),
+    JoinTimeout,
 }
 
 #[derive(Debug)]
@@ -190,6 +192,17 @@ impl Prometheus {
                             }
                             Stat::DownlinkTimeout => {
                                 stats.data_fail.with_label_values(label.as_slice()).inc();
+                            }
+                            Stat::JoinResponse(t) => {
+                                let in_seconds = t as f64 / 1000.0;
+                                stats
+                                    .join_response_buffer
+                                    .with_label_values(label.as_slice())
+                                    .observe(in_seconds);
+                                stats.join_success.with_label_values(label.as_slice()).inc();
+                            }
+                            Stat::JoinTimeout => {
+                                stats.join_fail.with_label_values(label.as_slice()).inc();
                             }
                         }
                     }
