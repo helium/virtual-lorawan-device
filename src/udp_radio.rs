@@ -95,7 +95,7 @@ pub async fn need_to_schedule_packet(
     fcnt_before_rejoin: Option<usize>,
 ) -> bool {
     if let (Some(fcnt_threshold), Some(fcnt)) = (fcnt_before_rejoin, lorawan.get_fcnt_up()) {
-        if fcnt == fcnt_threshold as u32 {
+        if fcnt >= fcnt_threshold as u32 {
             lorawan_sender
                 .send(IntermediateEvent::NewSession)
                 .await
