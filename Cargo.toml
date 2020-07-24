@@ -1,6 +1,6 @@
 [package]
 name = "virtual-lorawan-device"
-version = "0.1.3-rc1"
+version = "0.1.3-rc4"
 authors = ["lthiery <louis@helium.com>"]
 edition = "2018"
 
@@ -19,7 +19,10 @@ version = "0.4.1"
 [dependencies]
 prometheus = { version = "0.9.0" }
 semtech-udp = { git = "https://github.com/helium/semtech-udp.git" }
-lorawan-device = { git = "https://github.com/helium/rust-lorawan", branch = "lthiery/join-timeouts"}
+#lorawan-device = { path = "../rust-lorawan/device"}
+#lorawan-encoding = { path = "../rust-lorawan/encoding"}
+lorawan-device = { git = "https://github.com/helium/rust-lorawan.git"}
+lorawan-encoding = { git = "https://github.com/helium/rust-lorawan.git"}
 rand = "0.7.3"
 heapless = "0.5.4"
 base64 = "*"

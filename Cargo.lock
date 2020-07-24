@@ -745,9 +745,10 @@ dependencies = [
 [[package]]
 name = "lorawan-device"
 version = "0.1.0"
-source = "git+https://github.com/helium/rust-lorawan?branch=lthiery/join-timeouts#27104b10f5b219178faa2474b26cbab48ae22d73"
+source = "git+https://github.com/helium/rust-lorawan.git#3767d21499e312a266d7caf1b73ba2a497d08313"
 dependencies = [
  "as-slice",
+ "generic-array 0.14.3",
  "heapless",
  "lorawan-encoding",
 ]
@@ -755,7 +756,7 @@ dependencies = [
 [[package]]
 name = "lorawan-encoding"
 version = "0.6.0-rc0"
-source = "git+https://github.com/helium/rust-lorawan?branch=lthiery/join-timeouts#27104b10f5b219178faa2474b26cbab48ae22d73"
+source = "git+https://github.com/helium/rust-lorawan.git#3767d21499e312a266d7caf1b73ba2a497d08313"
 dependencies = [
  "aes",
  "cmac",
@@ -1767,7 +1768,7 @@ checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
 
 [[package]]
 name = "virtual-lorawan-device"
-version = "0.1.3-rc1"
+version = "0.1.3-rc4"
 dependencies = [
  "base64 0.12.3",
  "bytes 0.4.12",
@@ -1779,6 +1780,7 @@ dependencies = [
  "hyper-tls",
  "lazy_static",
  "lorawan-device",
+ "lorawan-encoding",
  "prometheus",
  "rand 0.7.3",
  "semtech-udp",

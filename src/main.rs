@@ -3,6 +3,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate prometheus;
 
+mod device_loop;
 mod udp_runtime;
 use udp_runtime::UdpRuntime;
 mod udp_radio;
@@ -14,7 +15,8 @@ mod config;
 mod prometheus_service;
 
 use {
-    lorawan_device::Device as LoRaWanDevice,
+    lorawan_device::Device as LorawanDevice,
+    lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto,
     prometheus_service::PrometheusBuilder,
     rand::Rng,
     std::{
@@ -172,7 +174,7 @@ async fn run<'a>(
             radio_runtime.run().await.unwrap();
         });
 
-        let lorawan = LoRaWanDevice::new(
+        let lorawan: LorawanDevice<UdpRadio, LorawanCrypto> = LorawanDevice::new(
             radio,
             device.credentials().deveui_cloned_into_buf()?,
             device.credentials().appeui_cloned_into_buf()?,
@@ -188,7 +190,7 @@ async fn run<'a>(
         };
 
         tokio::spawn(async move {
-            udp_radio::run_loop(lorawan_receiver, lorawan_sender, lorawan, prom_sender)
+            device_loop::run(lorawan_receiver, lorawan_sender, lorawan, prom_sender)
                 .await
                 .unwrap();
         });
