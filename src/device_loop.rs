@@ -39,9 +39,8 @@ pub async fn send_packet_or_new_join<C: lorawan_encoding::keys::CryptoFactory + 
                 .unwrap();
             return;
         }
-    } else {
-        schedule_packet(lorawan_sender, lorawan, transmit_delay).await;
     }
+    schedule_packet(lorawan_sender, lorawan, transmit_delay).await;
 }
 
 pub async fn schedule_packet<C: lorawan_encoding::keys::CryptoFactory + Default>(
@@ -188,7 +187,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                     LorawanResponse::DownlinkReceived(fcnt_down) => {
                         if let Some(t) = time {
                             debugln!(
-                                "{}: DataDown [{} ms to spare], FcntDown = {} ",
+                                "{}: Downlink received [{} ms to spare], FcntDown = {} ",
                                 device_ref,
                                 t,
                                 fcnt_down
