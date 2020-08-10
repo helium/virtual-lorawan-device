@@ -21,6 +21,31 @@ struct UdpRuntimeRx {
     socket_recv: RecvHalf,
 }
 
+#[derive(Debug)]
+pub enum Error {
+    SemtechUdpSerialize(semtech_udp::Error),
+    SemtechUdpDeserialize(semtech_udp::parser::Error),
+    SendError(tokio::sync::mpsc::error::SendError<TxMessage>),
+}
+
+impl From<semtech_udp::parser::Error> for Error {
+    fn from(err: semtech_udp::parser::Error) -> Error {
+        Error::SemtechUdpDeserialize(err)
+    }
+}
+
+impl From<tokio::sync::mpsc::error::SendError<TxMessage>> for Error {
+    fn from(err: tokio::sync::mpsc::error::SendError<TxMessage>) -> Error {
+        Error::SendError(err)
+    }
+}
+
+impl From<semtech_udp::Error> for Error {
+    fn from(err: semtech_udp::Error) -> Error {
+        Error::SemtechUdpSerialize(err)
+    }
+}
+
 struct UdpRuntimeTx {
     receiver: Receiver<TxMessage>,
     sender: Sender<TxMessage>,
@@ -46,14 +71,14 @@ impl UdpRuntime {
         self.rx.sender.subscribe()
     }
 
-    pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(self) -> Result<(), Error> {
         let (rx, tx, mut poll_sender) = self.split();
 
         // udp_runtime_rx reads from the UDP port
         // and sends packets to the receiver channel
         tokio::spawn(async move {
             if let Err(e) = rx.run().await {
-                panic!("UdpRuntimeRx threw error: {}", e)
+                panic!("UdpRuntimeRx threw error: {:?}", e)
             }
         });
 
@@ -61,7 +86,7 @@ impl UdpRuntime {
         // by receiving packets from the sender channel
         tokio::spawn(async move {
             if let Err(e) = tx.run().await {
-                panic!("UdpRuntimeTx threw error: {}", e)
+                panic!("UdpRuntimeTx threw error: {:?}", e)
             }
         });
 
@@ -111,7 +136,7 @@ use std::time::Duration;
 use tokio::time::delay_for;
 
 impl UdpRuntimeRx {
-    pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(mut self) -> Result<(), Error> {
         let mut buf = vec![0u8; 1024];
         loop {
             match self.socket_recv.recv(&mut buf).await {
@@ -130,14 +155,16 @@ impl UdpRuntimeRx {
                         },
                     }
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => {
+                    println!("Socket receive error: {}", e);
+                }
             }
         }
     }
 }
 
 impl UdpRuntimeTx {
-    pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(mut self) -> Result<(), Error> {
         let mut buf = vec![0u8; 1024];
         let mac: [u8; 8] = [170, 85, 90, 0, 0, 0, 0, 5];
         loop {
@@ -161,7 +188,10 @@ impl UdpRuntimeTx {
                 }
 
                 let n = data.serialize(&mut buf)? as usize;
-                let _sent = self.socket_send.send(&buf[..n]).await?;
+
+                if let Err(e) = self.socket_send.send(&buf[..n]).await {
+                    println!("Socket error: {}", e);
+                }
             }
         }
     }
