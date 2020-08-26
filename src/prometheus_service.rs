@@ -1,18 +1,18 @@
+use crate::config::Device;
 use hyper::{
     header::CONTENT_TYPE,
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
+use prometheus::{CounterVec, Encoder, HistogramVec, TextEncoder};
 use std::{fmt, sync::Mutex};
 pub use tokio::sync::mpsc::{self, Receiver, Sender};
-
-use prometheus::{CounterVec, Encoder, HistogramVec, TextEncoder};
 
 static mut SENDER: Option<Mutex<Sender<Message>>> = None;
 
 #[derive(Debug)]
 pub enum Message {
-    Stat(String, Stat),
+    Stat(Device, Stat),
     HttpScrape(Sender<HttpData>),
 }
 
@@ -178,31 +178,31 @@ impl Prometheus {
             let msg = receiver.recv().await;
             if let Some(msg) = msg {
                 match msg {
-                    Message::Stat(mut device_ref, stat) => {
-                        device_ref.insert(0, '_');
-                        let label = vec![device_ref.as_str()];
+                    Message::Stat(config, stat) => {
+                        let oui = config.oui().to_string();
+                        let label = [oui.as_str()];
                         match stat {
                             Stat::DownlinkResponse(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
                                     .data_response_buffer
-                                    .with_label_values(label.as_slice())
+                                    .with_label_values(&label)
                                     .observe(in_seconds);
-                                stats.data_success.with_label_values(label.as_slice()).inc();
+                                stats.data_success.with_label_values(&label).inc();
                             }
                             Stat::DownlinkTimeout => {
-                                stats.data_fail.with_label_values(label.as_slice()).inc();
+                                stats.data_fail.with_label_values(&label).inc();
                             }
                             Stat::JoinResponse(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
                                     .join_response_buffer
-                                    .with_label_values(label.as_slice())
+                                    .with_label_values(&label)
                                     .observe(in_seconds);
-                                stats.join_success.with_label_values(label.as_slice()).inc();
+                                stats.join_success.with_label_values(&label).inc();
                             }
                             Stat::JoinTimeout => {
-                                stats.join_fail.with_label_values(label.as_slice()).inc();
+                                stats.join_fail.with_label_values(&label).inc();
                             }
                         }
                     }

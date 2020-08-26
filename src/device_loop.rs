@@ -115,7 +115,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
             };
 
             lorawan = new_state;
-
+            let config = lorawan.get_radio().config().clone();
             match response {
                 Ok(response) => match response {
                     LorawanResponse::TimeoutRequest(delay) => {
@@ -125,7 +125,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                         debugln!("{}: No JoinAccept Received", device_ref);
                         if let Some(ref mut sender) = prometheus {
                             sender
-                                .send(prometheus::Message::Stat(device_ref, Stat::JoinTimeout))
+                                .send(prometheus::Message::Stat(config, Stat::JoinTimeout))
                                 .await?
                         }
                         // if the Join Request failed try again
@@ -144,10 +144,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                             );
                             if let Some(ref mut sender) = prometheus {
                                 sender
-                                    .send(prometheus::Message::Stat(
-                                        device_ref,
-                                        Stat::JoinResponse(t),
-                                    ))
+                                    .send(prometheus::Message::Stat(config, Stat::JoinResponse(t)))
                                     .await?
                             }
                         }
@@ -158,7 +155,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                         debugln!("{}: NoAck", device_ref);
                         if let Some(ref mut sender) = prometheus {
                             sender
-                                .send(prometheus::Message::Stat(device_ref, Stat::DownlinkTimeout))
+                                .send(prometheus::Message::Stat(config, Stat::DownlinkTimeout))
                                 .await?
                         }
 
@@ -195,7 +192,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                             if let Some(ref mut sender) = prometheus {
                                 sender
                                     .send(prometheus::Message::Stat(
-                                        device_ref,
+                                        config,
                                         Stat::DownlinkResponse(t),
                                     ))
                                     .await?
