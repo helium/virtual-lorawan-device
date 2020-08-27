@@ -117,40 +117,36 @@ impl PrometheusBuilder {
     pub fn build(self) -> Prometheus {
         let data_success = register_counter_vec!(
             opts!("data_success", "Total number of packets sent"),
-            &["device"]
+            &["oui"]
         )
         .unwrap();
 
-        let data_fail = register_counter_vec!(
-            opts!("data_fail", "Total number of fail packets"),
-            &["device"]
-        )
-        .unwrap();
+        let data_fail =
+            register_counter_vec!(opts!("data_fail", "Total number of fail packets"), &["oui"])
+                .unwrap();
 
         let data_response_buffer = register_histogram_vec!(
             "data_response_buffer",
             "Time remaining before timeout",
-            &["device"],
+            &["oui"],
             vec![0.1, 0.20, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         )
         .unwrap();
 
         let join_success = register_counter_vec!(
             opts!("join_success", "Total number of packets sent"),
-            &["device"]
+            &["oui"]
         )
         .unwrap();
 
-        let join_fail = register_counter_vec!(
-            opts!("join_fail", "Total number of fail packets"),
-            &["device"]
-        )
-        .unwrap();
+        let join_fail =
+            register_counter_vec!(opts!("join_fail", "Total number of fail packets"), &["oui"])
+                .unwrap();
 
         let join_response_buffer = register_histogram_vec!(
             "join_response_buffer",
             "Time remaining before rx timeout in secs",
-            &["device"],
+            &["oui"],
             vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
         )
         .unwrap();
