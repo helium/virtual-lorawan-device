@@ -10,6 +10,7 @@ use {
         self as lorawan, radio, Device as LorawanDevice, Event as LorawanEvent,
         Response as LorawanResponse,
     },
+    lorawan_encoding::parser::FRMPayload,
     std::time::Duration,
     tokio::{
         sync::mpsc::{Receiver, Sender},
@@ -106,7 +107,6 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                     )))
                 }
                 IntermediateEvent::Timeout(id) => {
-                    println!("timeout fired");
                     if lorawan.get_radio().most_recent_timeout(id) {
                         lorawan.handle_event(LorawanEvent::TimeoutFired)
                     } else {
@@ -119,10 +119,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
             let config = lorawan.get_radio().config().clone();
             match response {
                 Ok(response) => match response {
-                    _ => (),
                     LorawanResponse::TimeoutRequest(delay) => {
-                        println!("timeout req");
-
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NoJoinAccept => {
@@ -194,9 +191,12 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                                 fcnt_down
                             );
 
-                            // if let Some(downlink) = lorawan.take_data_downlink() {
-                            //     debugln!("DownlinkPayload: {:?}", downlink);
-                            // }
+                            if let Some(downlink) = lorawan.take_data_downlink() {
+
+                                if let Ok(FRMPayload::Data(data)) = downlink.frm_payload() {
+                                    debugln!("Downlink Data Payload: {:?}", data);
+                                }
+                            }
 
                             if let Some(ref mut sender) = prometheus {
                                 sender
@@ -216,9 +216,36 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                         )
                         .await;
                     }
+                    LorawanResponse::SessionExpired => {
+                        lorawan_sender
+                            .send(IntermediateEvent::NewSession)
+                            .await
+                            .unwrap();
+                        // if let Some(t) = time {
+                        //     debugln!(
+                        //         "{}: Downlink received [{} ms to spare], FcntDown = {} ",
+                        //         device_ref,
+                        //         t,
+                        //         fcnt_down
+                        //     );
+                        //
+                        //     // if let Some(downlink) = lorawan.take_data_downlink() {
+                        //     //     debugln!("DownlinkPayload: {:?}", downlink);
+                        //     // }
+                        //
+                        //     if let Some(ref mut sender) = prometheus {
+                        //         sender
+                        //             .send(prometheus::Message::Stat(
+                        //                 config,
+                        //                 Stat::DownlinkResponse(t),
+                        //             ))
+                        //             .await?
+                        //     }
+                    }
                     LorawanResponse::JoinRequestSending => (),
                     LorawanResponse::UplinkSending(_) => (),
                 },
+
                 Err(err) => match err {
                     lorawan::Error::Radio(_) => (),
                     lorawan::Error::Session(e) => {
