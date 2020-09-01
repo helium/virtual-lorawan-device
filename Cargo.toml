@@ -19,8 +19,10 @@ version = "0.4.1"
 [dependencies]
 prometheus = { version = "0.9.0" }
 semtech-udp = { git = "https://github.com/helium/semtech-udp.git" }
-lorawan-device = { git = "https://github.com/helium/rust-lorawan.git"}
-lorawan-encoding = { git = "https://github.com/helium/rust-lorawan.git"}
+#lorawan-device = { path = "../rust-lorawan/device"}
+#lorawan-encoding =  { path = "../rust-lorawan/encoding"}
+lorawan-device = { git = "https://github.com/helium/rust-lorawan.git", rev ="0269a082622c2608b7e8db9270ca4d36c0468427"}
+lorawan-encoding = { git = "https://github.com/helium/rust-lorawan.git", rev = "0269a082622c2608b7e8db9270ca4d36c0468427"}
 rand = "0.7.3"
 heapless = "0.5.4"
 base64 = "*"

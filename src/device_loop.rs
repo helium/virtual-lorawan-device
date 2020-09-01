@@ -94,10 +94,10 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                     lorawan.handle_event(event)
                 }
                 IntermediateEvent::SendPacket => {
-                    let data = [12, 3, 54, 54, 123, 23, 13, 14, 15, 16];
+                    let data = [rand::random(), rand::random(), rand::random(), rand::random(), rand::random(), rand::random(), rand::random(), rand::random(), rand::random(), rand::random()];
                     let fcnt_up = lorawan.get_fcnt_up().unwrap();
                     debugln!("{}: Sending DataUp, FcntUp = {}", device_ref, fcnt_up);
-                    lorawan.send(&data, 2, true)
+                    lorawan.send(&data, 2, false)
                 }
                 IntermediateEvent::Rx(packet, time_received) => {
                     time = Some(time_received);
@@ -106,6 +106,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                     )))
                 }
                 IntermediateEvent::Timeout(id) => {
+                    println!("timeout fired");
                     if lorawan.get_radio().most_recent_timeout(id) {
                         lorawan.handle_event(LorawanEvent::TimeoutFired)
                     } else {
@@ -118,7 +119,10 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
             let config = lorawan.get_radio().config().clone();
             match response {
                 Ok(response) => match response {
+                    _ => (),
                     LorawanResponse::TimeoutRequest(delay) => {
+                        println!("timeout req");
+
                         lorawan.get_radio().timer(delay).await;
                     }
                     LorawanResponse::NoJoinAccept => {
@@ -189,6 +193,11 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                                 t,
                                 fcnt_down
                             );
+
+                            // if let Some(downlink) = lorawan.take_data_downlink() {
+                            //     debugln!("DownlinkPayload: {:?}", downlink);
+                            // }
+
                             if let Some(ref mut sender) = prometheus {
                                 sender
                                     .send(prometheus::Message::Stat(

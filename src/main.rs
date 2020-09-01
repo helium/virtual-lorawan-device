@@ -11,6 +11,7 @@ use udp_radio::UdpRadio;
 mod cli;
 use cli::*;
 mod config;
+mod http;
 
 mod prometheus_service;
 
@@ -89,6 +90,11 @@ async fn run<'a>(
     opt: Opt,
     mut prometheus: Option<PrometheusBuilder>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let http_endpoint = http::Server::new();
+    tokio::spawn(async move {
+        http_endpoint.run().await.unwrap();
+    });
+
     let devices = if let Some(cmd) = opt.command {
         let Command::Console { cmd } = cmd;
         let clients = config::load_console_client(CONSOLE_CREDENTIALS_PATH)?;
