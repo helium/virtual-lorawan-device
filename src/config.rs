@@ -42,6 +42,12 @@ pub struct Device {
     oui: usize,
     fcnt_before_rejoin: Option<usize>,
     credentials: Credentials,
+    integrations: Option<Vec<Integration>>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub enum Integration {
+    Http,
 }
 
 impl Device {
@@ -55,6 +61,7 @@ impl Device {
                 app_key: device.app_key().to_string(),
                 dev_eui: device.dev_eui().to_string(),
             },
+            integrations: None,
         }
     }
     pub fn oui(&self) -> usize {
@@ -68,6 +75,18 @@ impl Device {
     }
     pub fn fcnt_before_rejoin(&self) -> Option<usize> {
         self.fcnt_before_rejoin
+    }
+
+    pub fn has_http_integration(&self) -> bool {
+        if let Some(integrations) = &self.integrations {
+            for integration in integrations {
+                match integration {
+                    Integration::Http => return true,
+                    _ => (),
+                }
+            }
+        }
+        false
     }
 }
 
@@ -101,7 +120,7 @@ pub struct ConsoleClients {
 fn key_verify(key: &str) -> Result<(), Box<dyn std::error::Error>> {
     let key_verify = base64::decode(key)?;
     if key_verify.len() != 32 {
-        panic!("Invalid API key ipnut");
+        panic!("Invalid API key input");
     }
     Ok(())
 }

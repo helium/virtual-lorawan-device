@@ -32,21 +32,16 @@ use {
     tokio::time::delay_for,
 };
 
-static mut RANDOM: Option<Mutex<Vec<u32>>> = None;
-
 // this is a workaround so that we can have a global function for random u32
 fn get_random_u32() -> u32 {
     unsafe {
-        if let Some(mutex) = &RANDOM {
-            let mut random = mutex.lock().unwrap();
-            if let Some(number) = random.pop() {
-                number
-            } else {
-                panic!("Random queue empty!")
-            }
+        let random = &mut *RANDOM.lock().unwrap();
+        if let Some(number) = random.pop() {
+            number
         } else {
-            panic!("Random queue not uninitialized!")
+            panic!("Random queue empty!")
         }
+
     }
 }
 
@@ -82,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 lazy_static! {
     static ref INSTANT: Instant = Instant::now();
+    static ref RANDOM: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 }
 
 const CONSOLE_CREDENTIALS_PATH: &str = "console-credentials.json";
@@ -90,10 +86,22 @@ async fn run<'a>(
     opt: Opt,
     mut prometheus: Option<PrometheusBuilder>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let http_endpoint = http::Server::new();
-    tokio::spawn(async move {
-        http_endpoint.run().await.unwrap();
-    });
+    let http_sender = if let Some(port) = opt.http_port {
+        let prom_sender = if let Some(prometheus) = &mut prometheus {
+            Some(prometheus.get_sender())
+        } else {
+            None
+        };
+
+        let http_endpoint = http::Server::new(prom_sender);
+        let ret = Some(http_endpoint.get_sender());
+        tokio::spawn(async move {
+            http_endpoint.run(port).await.unwrap();
+        });
+        ret
+    } else {
+        None
+    };
 
     let devices = if let Some(cmd) = opt.command {
         let Command::Console { cmd } = cmd;
@@ -136,23 +144,20 @@ async fn run<'a>(
         println!("{},", serde_json::to_string(&device)?);
     }
 
-    unsafe {
-        RANDOM = Some(Mutex::new(Vec::new()));
-    }
-
     // this is a workaround so that we can have a global function for random u32
     // it basically maintains 32 random u32's in a vector
     thread::spawn(move || {
         let mut rng = rand::thread_rng();
         loop {
             unsafe {
-                if let Some(mutex) = &RANDOM {
-                    let mut random = mutex.lock().unwrap();
+                {
+                    let random = &mut *RANDOM.lock().unwrap();
                     while random.len() < 2056 {
                         random.push(rng.gen())
                     }
                 }
-                thread::sleep(time::Duration::from_millis(100));
+                // scope ensures that mutex is dropped during sleep
+                thread::sleep(time::Duration::from_millis(1000));
             }
         }
     });
@@ -199,8 +204,19 @@ async fn run<'a>(
             None
         };
 
+        // only give a sender to devices that have the HTTP integration
+        let http = if device.has_http_integration() {
+            if let Some(http_sender) = &http_sender {
+                Some(http_sender.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         tokio::spawn(async move {
-            device_loop::run(lorawan_receiver, lorawan_sender, lorawan, prom_sender)
+            device_loop::run(lorawan_receiver, lorawan_sender, lorawan, prom_sender, http)
                 .await
                 .unwrap();
         });
