@@ -26,10 +26,9 @@ use {
         str::FromStr,
         sync::Mutex,
         thread,
-        time::{self, Duration, Instant},
+        time::{self, Instant},
     },
     structopt::StructOpt,
-    tokio::time::delay_for,
 };
 
 // this is a workaround so that we can have a global function for random u32
@@ -161,10 +160,8 @@ async fn run<'a>(
             thread::sleep(time::Duration::from_millis(1000));
         }
     });
-    // the delay gives the random number generator get started
-    delay_for(Duration::from_millis(50)).await;
 
-    let my_address = SocketAddr::from(([0, 0, 0, 0], get_random_u32() as u16));
+    let my_address = SocketAddr::from(([0, 0, 0, 0], 0));
     let host = SocketAddr::from_str(opt.host.as_str())?;
 
     let udp_runtime = UdpRuntime::new(my_address, host).await?;

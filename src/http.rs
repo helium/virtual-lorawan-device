@@ -171,8 +171,6 @@ impl Server {
 
             loop {
                 let event = self.receiver.recv().await.unwrap();
-                println!("event! {:?}", event);
-
                 match event {
                     UplinkMessage::Expect(expected) => {
                         // track this expected event
