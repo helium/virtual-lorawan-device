@@ -34,14 +34,11 @@ use {
 
 // this is a workaround so that we can have a global function for random u32
 fn get_random_u32() -> u32 {
-    unsafe {
-        let random = &mut *RANDOM.lock().unwrap();
-        if let Some(number) = random.pop() {
-            number
-        } else {
-            panic!("Random queue empty!")
-        }
-
+    let random = &mut *RANDOM.lock().unwrap();
+    if let Some(number) = random.pop() {
+        number
+    } else {
+        panic!("Random queue empty!")
     }
 }
 
@@ -93,7 +90,7 @@ async fn run<'a>(
             None
         };
 
-        let http_endpoint = http::Server::new(prom_sender);
+        let http_endpoint = http::Server::new(prom_sender).await;
         let ret = Some(http_endpoint.get_sender());
         tokio::spawn(async move {
             http_endpoint.run(port).await.unwrap();
@@ -149,16 +146,14 @@ async fn run<'a>(
     thread::spawn(move || {
         let mut rng = rand::thread_rng();
         loop {
-            unsafe {
-                {
-                    let random = &mut *RANDOM.lock().unwrap();
-                    while random.len() < 2056 {
-                        random.push(rng.gen())
-                    }
+            {
+                let random = &mut *RANDOM.lock().unwrap();
+                while random.len() < 2056 {
+                    random.push(rng.gen())
                 }
-                // scope ensures that mutex is dropped during sleep
-                thread::sleep(time::Duration::from_millis(1000));
             }
+            // scope ensures that mutex is dropped during sleep
+            thread::sleep(time::Duration::from_millis(1000));
         }
     });
     // the delay gives the random number generator get started

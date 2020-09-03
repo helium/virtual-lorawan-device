@@ -1,11 +1,11 @@
 #![macro_use]
+use lorawan_encoding::parser::DecryptedDataPayload;
 use {
     super::{
-        debugln, prometheus_service as prometheus,
+        debugln, http, prometheus_service as prometheus,
         prometheus_service::Stat,
         udp_radio::{IntermediateEvent, UdpRadio},
         INSTANT,
-        http,
     },
     lorawan_device::{
         self as lorawan, radio, Device as LorawanDevice, Event as LorawanEvent,
@@ -18,7 +18,6 @@ use {
         time::delay_for,
     },
 };
-use lorawan_encoding::parser::DecryptedDataPayload;
 
 pub fn pretty_device(creds: &lorawan::Credentials) -> String {
     let mut bytes: Vec<u8> = Vec::new();
@@ -81,9 +80,7 @@ fn process_downlink<T: std::convert::AsRef<[u8]>>(
         mac_commands.push_str(format!("{:?},", mac_command).as_str());
         mac_commands_len += 1;
     }
-    if mac_commands_len !=0 {
-
-    }
+    if mac_commands_len != 0 {}
 
     if let Ok(FRMPayload::Data(data)) = downlink.frm_payload() {
         debugln!(
@@ -110,7 +107,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
     mut lorawan_sender: Sender<IntermediateEvent>,
     mut lorawan: LorawanDevice<UdpRadio, C>,
     mut prometheus: Option<Sender<prometheus::Message>>,
-    mut http: Option<Sender<http::Message>>
+    mut http: Option<Sender<http::Message>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
@@ -167,13 +164,18 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                     // if we have an Http sender, then we want to notify it of
                     // expected uplink
                     if let Some(http_sender) = &mut http {
-                        http_sender.send(http::Message::ExpectUplink(
-                            http::ExpectUplink::new(
-                            INSTANT.elapsed().as_millis(),
-                            &data,
-                            fport,
-                            fcnt_up
-                        ))).await;
+                        let device = lorawan.get_radio().config().clone();
+
+                        http_sender
+                            .send(http::Message::ExpectUplink(http::ExpectUplink::new(
+                                device,
+                                INSTANT.elapsed().as_millis(),
+                                &data,
+                                fport,
+                                fcnt_up,
+                            )))
+                            .await
+                            .unwrap();
                     }
 
                     lorawan.send(&data, 2, true)
@@ -292,7 +294,6 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                             .send(IntermediateEvent::NewSession)
                             .await
                             .unwrap();
-
                     }
                     LorawanResponse::JoinRequestSending => (),
                     LorawanResponse::UplinkSending(_) => (),

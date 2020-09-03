@@ -11,6 +11,9 @@ pub struct Credentials {
 }
 
 impl Credentials {
+    pub fn appeui(&self) -> &String {
+        &self.app_eui
+    }
     pub fn deveui(&self) -> &String {
         &self.dev_eui
     }
@@ -48,6 +51,7 @@ pub struct Device {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum Integration {
     Http,
+    Mqtt,
 }
 
 impl Device {
@@ -80,10 +84,7 @@ impl Device {
     pub fn has_http_integration(&self) -> bool {
         if let Some(integrations) = &self.integrations {
             for integration in integrations {
-                match integration {
-                    Integration::Http => return true,
-                    _ => (),
-                }
+                if let Integration::Http = integration { return true}
             }
         }
         false
