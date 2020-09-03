@@ -86,7 +86,7 @@ impl Device {
         self.fcnt_before_rejoin
     }
 
-    pub fn has_http_integration(&self) -> bool {
+    pub fn has_http_uplink_integration(&self) -> bool {
         if let Some(integrations) = &self.integrations {
             for integration in integrations {
                 if let Integration::HttpUplink = integration {
@@ -95,6 +95,28 @@ impl Device {
             }
         }
         false
+    }
+
+    pub fn has_http_downlink_integration(&self) -> bool {
+        if let Some(integrations) = &self.integrations {
+            for integration in integrations {
+                if let Integration::HttpDownlink(_) = integration {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn get_http_downlink_url(&self) -> Option<String> {
+        if let Some(integrations) = &self.integrations {
+            for integration in integrations {
+                if let Integration::HttpDownlink(downlink) = integration {
+                    return Some(downlink.url.clone());
+                }
+            }
+        }
+        None
     }
 }
 

@@ -99,13 +99,6 @@ struct DataIn {
     payload: String,
 }
 
-#[derive(Serialize, Debug)]
-struct Downlink {
-    payload_raw: String,
-    port: usize,
-    confirmed: bool,
-}
-
 lazy_static! {
     // this sender allows the data_received function to dispatch messages
     // to the task which compares Expected and Received messages
@@ -230,5 +223,222 @@ impl Server {
         let serve_future = HyperServer::bind(&addr).serve(make_svc);
 
         serve_future.await
+    }
+}
+
+#[derive(Debug)]
+pub enum DownlinkMessage {
+    Expect(DownlinkRecord),
+    ExpectTimeout(DownlinkRecord),
+    Received(DownlinkRecord),
+}
+
+#[derive(Debug, Clone)]
+pub struct DownlinkExpect {
+    device: config::Device,
+    t: u128,
+    payload: Vec<u8>,
+    fport: u8,
+    fcnt: u32,
+}
+
+pub struct Downlinker {
+    device: config::Device,
+    url: String,
+    sender: Sender<DownlinkMessage>,
+    receiver: Receiver<DownlinkMessage>,
+    prometheus: Option<Sender<prometheus::Message>>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct DownlinkRequest {
+    payload_raw: String,
+    port: u8,
+    confirmed: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct DownlinkRecord {
+    t: u128,
+    request: DownlinkRequest,
+}
+
+use lorawan_encoding::parser::{DataHeader, DecryptedDataPayload, FRMPayload};
+use std::convert::AsRef;
+
+impl DownlinkRecord {
+    pub fn from_request(req: &DownlinkRequest) -> DownlinkRecord {
+        DownlinkRecord {
+            t: INSTANT.elapsed().as_millis(),
+            request: req.clone(),
+        }
+    }
+
+    pub fn from_decrypted_data_payload<T: AsRef<[u8]>>(
+        payload: &DecryptedDataPayload<T>,
+    ) -> DownlinkRecord {
+        let port = if let Some(port) = payload.f_port() {
+            port
+        } else {
+            0
+        };
+
+        DownlinkRecord {
+            t: INSTANT.elapsed().as_millis(),
+            request: DownlinkRequest {
+                payload_raw: if let Ok(FRMPayload::Data(data)) = &payload.frm_payload() {
+                    base64::encode(data)
+                } else {
+                    "".to_string()
+                },
+                port,
+                confirmed: false,
+            },
+        }
+    }
+
+    fn hash_key(&self) -> (String, u8) {
+        (self.request.payload_raw.clone(), self.request.port)
+    }
+}
+
+fn generate_random_payload() -> String {
+    let data = [
+        rand::random(),
+        rand::random(),
+        rand::random(),
+        rand::random(),
+        rand::random(),
+        rand::random(),
+        rand::random(),
+        rand::random(),
+        rand::random(),
+        rand::random(),
+    ];
+    base64::encode(data)
+}
+
+fn generate_random_port() -> u8 {
+    let mut port = rand::random();
+    while port == 0 {
+        port = rand::random();
+    }
+    port
+}
+
+impl Downlinker {
+    pub fn new(
+        device: config::Device,
+        url: &str,
+        prometheus: Option<Sender<prometheus::Message>>,
+    ) -> Downlinker {
+        let (sender, receiver) = mpsc::channel(100);
+
+        Downlinker {
+            device,
+            url: url.to_string(),
+            sender,
+            receiver,
+            prometheus,
+        }
+    }
+
+    pub fn get_sender(&self) -> Sender<DownlinkMessage> {
+        self.sender.clone()
+    }
+
+    pub async fn run(mut self) {
+        let mut self_sender = self.get_sender();
+        let url = self.url;
+
+        // give a delay for the Join to happen
+        delay_for(Duration::from_secs(30)).await;
+
+        tokio::spawn(async move {
+            loop {
+                delay_for(Duration::from_secs(10)).await;
+                // send a downlink
+                let downlink = DownlinkRequest {
+                    payload_raw: generate_random_payload(),
+                    port: generate_random_port(),
+                    confirmed: false,
+                };
+
+                let client = reqwest::Client::new();
+                let request = client
+                    .post(url.as_str())
+                    .header("Content-Type", "application/json")
+                    .json(&downlink);
+
+                let response = request.send().await.unwrap();
+
+                if response.status() != 200 {
+                    panic!("Bad response status {}", response.status());
+                } else {
+                    self_sender
+                        .send(DownlinkMessage::Expect(DownlinkRecord::from_request(
+                            &downlink,
+                        )))
+                        .await
+                        .unwrap();
+                }
+            }
+        });
+
+        let mut prometheus = self.prometheus;
+
+        // we will use (AppEui,DevEui,FCnt) to track expected events
+        // either Uplink occurs or Timeout occurs and fetches
+        // the tracked expected event first
+        let mut expected_tracker = HashMap::new();
+        let device = self.device;
+
+        loop {
+            let event = self.receiver.recv().await.unwrap();
+            match event {
+                DownlinkMessage::Expect(expected) => {
+                    // track this expected event
+                    expected_tracker.insert(expected.hash_key(), expected.clone());
+                    let mut sender = self.sender.clone();
+                    tokio::spawn(async move {
+                        delay_for(Duration::from_secs(5)).await;
+                        sender
+                            .send(DownlinkMessage::ExpectTimeout(expected.clone()))
+                            .await
+                            .unwrap();
+                    });
+                }
+                DownlinkMessage::ExpectTimeout(timeout) => {
+                    // if hashmap returns item, it still exists
+                    if let Some(_expected) = expected_tracker.remove(&timeout.hash_key()) {
+                        if let Some(sender) = &mut prometheus {
+                            sender
+                                .send(prometheus::Message::Stat(
+                                    device.clone(),
+                                    Stat::HttpDownlinkTimeout,
+                                ))
+                                .await
+                                .unwrap();
+                        }
+                    }
+                }
+                DownlinkMessage::Received(received) => {
+                    // if hashmap returns item, timeout has not fired yet
+                    if let Some(expected) = expected_tracker.remove(&received.hash_key()) {
+                        if let Some(sender) = &mut prometheus {
+                            let time = received.t - expected.t;
+
+                            sender
+                                .send(prometheus::Message::Stat(
+                                    device.clone(),
+                                    Stat::HttpDownlink(time as u64),
+                                ))
+                                .await
+                                .unwrap();
+                        }
+                    }
+                }
+            }
+        }
     }
 }

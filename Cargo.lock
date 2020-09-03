@@ -1778,6 +1778,7 @@ dependencies = [
  "lorawan-encoding",
  "prometheus",
  "rand 0.7.3",
+ "reqwest",
  "semtech-udp",
  "serde",
  "serde_derive",

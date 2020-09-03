@@ -33,3 +33,4 @@ bytes = "0.4.12"
 chrono = "0.4"
 lazy_static = "1.4.0"
 helium-console = { git = "https://github.com/helium/helium-console-cli" }
+reqwest = { versio = "0.10", features = ["json"]}

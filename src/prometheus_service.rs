@@ -20,6 +20,8 @@ pub enum Message {
 pub enum Stat {
     HttpUplink(u64),
     HttpUplinkTimeout,
+    HttpDownlink(u64),
+    HttpDownlinkTimeout,
     DownlinkResponse(u64),
     DownlinkTimeout,
     JoinResponse(u64),
@@ -81,18 +83,26 @@ struct Tracker {
 impl Tracker {
     fn new(label: &str, buckets: Vec<f64>) -> Tracker {
         let success = register_counter_vec!(
-            opts!(format!("{}_success", label), "".to_string()),
+            opts!(
+                format!("{}_success", label),
+                format!("Success counter for {}", label)
+            ),
             &["oui"]
         )
         .unwrap();
 
-        let fail =
-            register_counter_vec!(opts!(format!("{}_fail", label), "".to_string()), &["oui"])
-                .unwrap();
+        let fail = register_counter_vec!(
+            opts!(
+                format!("{}_fail", label),
+                format!("Fail counter for {}", label)
+            ),
+            &["oui"]
+        )
+        .unwrap();
 
         let latency = register_histogram_vec!(
             format!("{}_latency", label),
-            "".to_string(),
+            format!("Latency histogram for {}", label),
             &["oui"],
             buckets
         )
@@ -110,6 +120,7 @@ struct Stats {
     data: Tracker,
     join: Tracker,
     http_uplink: Tracker,
+    http_downlink: Tracker,
 }
 
 pub struct PrometheusBuilder {
@@ -154,10 +165,8 @@ impl PrometheusBuilder {
                 "join",
                 vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5],
             ),
-            http_uplink: Tracker::new(
-                "http_uplink",
-                vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5],
-            ),
+            http_uplink: Tracker::new("http_uplink", vec![0.25, 0.5, 1.0, 1.5, 2.0, 2.5]),
+            http_downlink: Tracker::new("http_downlink", vec![0.25, 0.5, 1.0, 1.5, 2.0, 2.5]),
         };
 
         Prometheus {
@@ -213,7 +222,18 @@ impl Prometheus {
                             }
                             Stat::HttpUplinkTimeout => {
                                 stats.http_uplink.fail.with_label_values(&label).inc();
-                                println!("\tHttpUplinkTimeout");
+                            }
+                            Stat::HttpDownlink(t) => {
+                                let in_seconds = t as f64 / 1000.0;
+                                stats
+                                    .http_downlink
+                                    .latency
+                                    .with_label_values(&label)
+                                    .observe(in_seconds);
+                                stats.http_downlink.success.with_label_values(&label).inc();
+                            }
+                            Stat::HttpDownlinkTimeout => {
+                                stats.http_downlink.fail.with_label_values(&label).inc();
                             }
                         }
                     }
