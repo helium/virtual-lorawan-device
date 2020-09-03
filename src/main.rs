@@ -11,7 +11,7 @@ use udp_radio::UdpRadio;
 mod cli;
 use cli::*;
 mod config;
-mod http;
+mod http_integration;
 
 mod prometheus_service;
 
@@ -89,7 +89,7 @@ async fn run<'a>(
             None
         };
 
-        let http_endpoint = http::Server::new(prom_sender).await;
+        let http_endpoint = http_integration::Server::new(prom_sender).await;
         let ret = Some(http_endpoint.get_sender());
         tokio::spawn(async move {
             http_endpoint.run(port).await.unwrap();
@@ -98,7 +98,6 @@ async fn run<'a>(
     } else {
         None
     };
-
 
     // Devices may be loaded by connecting to Staging or Production Console
     // or a local file with json descriptors may be used
@@ -202,7 +201,7 @@ async fn run<'a>(
         };
 
         // only give a sender to devices that have the HTTP integration
-        let http = if device.has_http_integration() {
+        let http = if device.has_http_uplink_integration() {
             if let Some(http_sender) = &http_uplink_sender {
                 Some(http_sender.clone())
             } else {
@@ -212,10 +211,41 @@ async fn run<'a>(
             None
         };
 
+        // only give a sender to devices that have the HTTP downlink  integration
+        let http_downlink = if device.has_http_downlink_integration() {
+            if let Some(url) = device.get_http_downlink_url() {
+                let downlinker = http_integration::Downlinker::new(
+                    device.clone(),
+                    &url,
+                    if let Some(prometheus) = &mut prometheus {
+                        Some(prometheus.get_sender())
+                    } else {
+                        None
+                    },
+                );
+
+                let ret = downlinker.get_sender();
+
+                tokio::spawn(async move { downlinker.run().await });
+                Some(ret)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         tokio::spawn(async move {
-            device_loop::run(lorawan_receiver, lorawan_sender, lorawan, prom_sender, http)
-                .await
-                .unwrap();
+            device_loop::run(
+                lorawan_receiver,
+                lorawan_sender,
+                lorawan,
+                prom_sender,
+                http,
+                http_downlink,
+            )
+            .await
+            .unwrap();
         });
     }
 
