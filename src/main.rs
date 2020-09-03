@@ -83,7 +83,7 @@ async fn run<'a>(
     opt: Opt,
     mut prometheus: Option<PrometheusBuilder>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let http_sender = if let Some(port) = opt.http_port {
+    let http_uplink_sender = if let Some(port) = opt.http_port {
         let prom_sender = if let Some(prometheus) = &mut prometheus {
             Some(prometheus.get_sender())
         } else {
@@ -201,7 +201,7 @@ async fn run<'a>(
 
         // only give a sender to devices that have the HTTP integration
         let http = if device.has_http_integration() {
-            if let Some(http_sender) = &http_sender {
+            if let Some(http_sender) = &http_uplink_sender {
                 Some(http_sender.clone())
             } else {
                 None

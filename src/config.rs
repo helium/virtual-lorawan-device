@@ -51,7 +51,12 @@ pub struct Device {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum Integration {
     HttpUplink,
-    Mqtt,
+    HttpDownlink(HttpDownlink),
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct HttpDownlink {
+    url: String,
 }
 
 impl Device {
