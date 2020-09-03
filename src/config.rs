@@ -84,7 +84,9 @@ impl Device {
     pub fn has_http_integration(&self) -> bool {
         if let Some(integrations) = &self.integrations {
             for integration in integrations {
-                if let Integration::Http = integration { return true}
+                if let Integration::Http = integration {
+                    return true;
+                }
             }
         }
         false

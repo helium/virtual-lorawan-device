@@ -80,23 +80,23 @@ struct Tracker {
 
 impl Tracker {
     fn new(label: &str, buckets: Vec<f64>) -> Tracker {
-
         let success = register_counter_vec!(
             opts!(format!("{}_success", label), "".to_string()),
             &["oui"]
-        ).unwrap();
+        )
+        .unwrap();
 
-        let fail = register_counter_vec!(
-            opts!(format!("{}_fail", label), "".to_string()),
-            &["oui"]
-        ).unwrap();
+        let fail =
+            register_counter_vec!(opts!(format!("{}_fail", label), "".to_string()), &["oui"])
+                .unwrap();
 
         let latency = register_histogram_vec!(
             format!("{}_latency", label),
             "".to_string(),
             &["oui"],
             buckets
-        ).unwrap();
+        )
+        .unwrap();
 
         Tracker {
             success,
@@ -148,11 +148,16 @@ impl PrometheusBuilder {
     }
 
     pub fn build(self) -> Prometheus {
-
         let stats = Stats {
             data: Tracker::new("data", vec![0.1, 0.20, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),
-            join:Tracker::new("join", vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]),
-            http_uplink: Tracker::new("http_uplink", vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]),
+            join: Tracker::new(
+                "join",
+                vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5],
+            ),
+            http_uplink: Tracker::new(
+                "http_uplink",
+                vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5],
+            ),
         };
 
         Prometheus {
@@ -176,7 +181,8 @@ impl Prometheus {
                             Stat::DownlinkResponse(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
-                                    .data.latency
+                                    .data
+                                    .latency
                                     .with_label_values(&label)
                                     .observe(in_seconds);
                                 stats.data.success.with_label_values(&label).inc();
@@ -187,7 +193,8 @@ impl Prometheus {
                             Stat::JoinResponse(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
-                                    .join.latency
+                                    .join
+                                    .latency
                                     .with_label_values(&label)
                                     .observe(in_seconds);
                                 stats.join.success.with_label_values(&label).inc();
@@ -198,7 +205,8 @@ impl Prometheus {
                             Stat::HttpUplink(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
-                                    .http_uplink.latency
+                                    .http_uplink
+                                    .latency
                                     .with_label_values(&label)
                                     .observe(in_seconds);
                                 stats.http_uplink.success.with_label_values(&label).inc();

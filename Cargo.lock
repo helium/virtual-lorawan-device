@@ -480,7 +480,7 @@ checksum = "7abc8dd8451921606d809ba32e95b6111925cd2906060d2dcc29c070220503eb"
 dependencies = [
  "cfg-if",
  "libc",
- "wasi",
+ "wasi 0.9.0+wasi-snapshot-preview1",
 ]
 
 [[package]]
@@ -667,9 +667,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.5.1"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86b45e59b16c76b11bf9738fd5d38879d3bd28ad292d7b313608becb17ae2df9"
+checksum = "4e47a3566dd4fd4eec714ae6ceabdee0caec795be835c223d92c2d40f1e8cf1c"
 dependencies = [
  "autocfg 1.0.1",
  "hashbrown",
@@ -729,9 +729,9 @@ checksum = "755456fae044e6fa1ebbbd1b3e902ae19e73097ed4ed87bb79934a867c007bc3"
 
 [[package]]
 name = "libz-sys"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af67924b8dd885cccea261866c8ce5b74d239d272e154053ff927dae839f5ae9"
+checksum = "23b34178653005c1181711c333f0e5604a14a1b5115c814fd42304bdd16245e0"
 dependencies = [
  "cc",
  "libc",
@@ -751,6 +751,7 @@ dependencies = [
 [[package]]
 name = "lorawan-device"
 version = "0.2.0"
+source = "git+https://github.com/helium/rust-lorawan.git#503bdb6326c3d4538c98569b5b1218e4be1d5a9c"
 dependencies = [
  "as-slice",
  "generic-array 0.14.4",
@@ -761,6 +762,7 @@ dependencies = [
 [[package]]
 name = "lorawan-encoding"
 version = "0.6.0-rc0"
+source = "git+https://github.com/helium/rust-lorawan.git#503bdb6326c3d4538c98569b5b1218e4be1d5a9c"
 dependencies = [
  "aes",
  "cmac",
@@ -1366,7 +1368,7 @@ dependencies = [
 [[package]]
 name = "semtech-udp"
 version = "0.3.0"
-source = "git+https://github.com/helium/semtech-udp.git#86730ebd14dca4c222c388870e28210346d32438"
+source = "git+https://github.com/helium/semtech-udp.git#e8cfb7939f91b509459b71fe3da4c2a7ac978988"
 dependencies = [
  "arrayref",
  "num_enum",
@@ -1558,11 +1560,12 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.1.43"
+version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
+checksum = "6db9e6914ab8b1ae1c260a4ae7a49b6c5611b40328a735b21862567685e73255"
 dependencies = [
  "libc",
+ "wasi 0.10.0+wasi-snapshot-preview1",
  "winapi 0.3.9",
 ]
 
@@ -1798,6 +1801,12 @@ name = "wasi"
 version = "0.9.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
+
+[[package]]
+name = "wasi"
+version = "0.10.0+wasi-snapshot-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a143597ca7c7793eff794def352d41792a93c481eb1042423ff7ff72ba2c31f"
 
 [[package]]
 name = "wasm-bindgen"
