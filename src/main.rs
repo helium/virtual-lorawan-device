@@ -100,6 +100,11 @@ async fn run<'a>(
         None
     };
 
+
+    // Devices may be loaded by connecting to Staging or Production Console
+    // or a local file with json descriptors may be used
+    // Note: when loading from console, a default Json output is provided
+    // so you can derive a local json descriptor from it
     let devices = if let Some(cmd) = opt.command {
         let Command::Console { cmd } = cmd;
         let clients = config::load_console_client(CONSOLE_CREDENTIALS_PATH)?;
