@@ -25,6 +25,10 @@ pub struct Opt {
     #[structopt(short, long)]
     pub prometheus: bool,
 
+    /// Optional HTTP server for receiving Uplinks from Router
+    #[structopt(long)]
+    pub http_port: Option<u16>,
+
     /// Choose command to run
     #[structopt(subcommand)]
     pub command: Option<Command>,

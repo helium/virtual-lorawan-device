@@ -1,7 +1,8 @@
 #![macro_use]
+use lorawan_encoding::parser::DecryptedDataPayload;
 use {
     super::{
-        debugln, prometheus_service as prometheus,
+        debugln, http, prometheus_service as prometheus,
         prometheus_service::Stat,
         udp_radio::{IntermediateEvent, UdpRadio},
         INSTANT,
@@ -10,6 +11,7 @@ use {
         self as lorawan, radio, Device as LorawanDevice, Event as LorawanEvent,
         Response as LorawanResponse,
     },
+    lorawan_encoding::parser::{DataHeader, FRMPayload},
     std::time::Duration,
     tokio::{
         sync::mpsc::{Receiver, Sender},
@@ -61,11 +63,51 @@ pub async fn schedule_packet<C: lorawan_encoding::keys::CryptoFactory + Default>
     });
 }
 
+fn process_downlink<T: std::convert::AsRef<[u8]>>(
+    downlink: DecryptedDataPayload<T>,
+    device_ref: String,
+    t: u64,
+) {
+    let fhdr = downlink.fhdr();
+    let fopts = fhdr.fopts();
+
+    let mut mac_commands = String::new();
+    let mut mac_commands_len = 0;
+    for mac_command in fopts {
+        if mac_commands_len == 0 {
+            mac_commands.push_str("\tFOpts: ")
+        }
+        mac_commands.push_str(format!("{:?},", mac_command).as_str());
+        mac_commands_len += 1;
+    }
+    if mac_commands_len != 0 {}
+
+    if let Ok(FRMPayload::Data(data)) = downlink.frm_payload() {
+        debugln!(
+            "{}: Downlink received \t\t(FCntDown={}\tFRM: {:?}){}\t[{} ms to spare]",
+            device_ref,
+            fhdr.fcnt(),
+            data,
+            mac_commands,
+            t
+        );
+    } else {
+        debugln!(
+            "{}: Downlink received \t\t(FcntDown={}){}\t[{} ms to spare]",
+            device_ref,
+            fhdr.fcnt(),
+            mac_commands,
+            t,
+        );
+    }
+}
+
 pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
     mut lorawan_receiver: Receiver<IntermediateEvent>,
     mut lorawan_sender: Sender<IntermediateEvent>,
     mut lorawan: LorawanDevice<UdpRadio, C>,
     mut prometheus: Option<Sender<prometheus::Message>>,
+    mut http: Option<Sender<http::Message>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
@@ -94,9 +136,48 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                     lorawan.handle_event(event)
                 }
                 IntermediateEvent::SendPacket => {
-                    let data = [12, 3, 54, 54, 123, 23, 13, 14, 15, 16];
+                    let mut fport = rand::random();
+                    if fport == 0 {
+                        fport = 1;
+                    }
+
+                    let data = [
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                        rand::random(),
+                    ];
                     let fcnt_up = lorawan.get_fcnt_up().unwrap();
-                    debugln!("{}: Sending DataUp, FcntUp = {}", device_ref, fcnt_up);
+                    debugln!(
+                        "{}: Sending DataUp \t\t(FcntUp  ={},\t{:?}",
+                        device_ref,
+                        fcnt_up,
+                        data
+                    );
+
+                    // if we have an Http sender, then we want to notify it of
+                    // expected uplink
+                    if let Some(http_sender) = &mut http {
+                        let device = lorawan.get_radio().config().clone();
+
+                        http_sender
+                            .send(http::Message::ExpectUplink(http::ExpectUplink::new(
+                                device,
+                                INSTANT.elapsed().as_millis(),
+                                &data,
+                                fport,
+                                fcnt_up,
+                            )))
+                            .await
+                            .unwrap();
+                    }
+
                     lorawan.send(&data, 2, true)
                 }
                 IntermediateEvent::Rx(packet, time_received) => {
@@ -181,14 +262,11 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                         )
                         .await;
                     }
-                    LorawanResponse::DownlinkReceived(fcnt_down) => {
+                    LorawanResponse::DownlinkReceived(_) => {
                         if let Some(t) = time {
-                            debugln!(
-                                "{}: Downlink received [{} ms to spare], FcntDown = {} ",
-                                device_ref,
-                                t,
-                                fcnt_down
-                            );
+                            if let Some(downlink) = lorawan.take_data_downlink() {
+                                process_downlink(downlink, device_ref, t);
+                            }
                             if let Some(ref mut sender) = prometheus {
                                 sender
                                     .send(prometheus::Message::Stat(
@@ -198,7 +276,6 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                                     .await?
                             }
                         }
-
                         send_packet_or_new_join(
                             &mut lorawan_sender,
                             &mut lorawan,
@@ -207,9 +284,21 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                         )
                         .await;
                     }
+                    LorawanResponse::SessionExpired => {
+                        if let Some(t) = time {
+                            if let Some(downlink) = lorawan.take_data_downlink() {
+                                process_downlink(downlink, device_ref, t);
+                            }
+                        }
+                        lorawan_sender
+                            .send(IntermediateEvent::NewSession)
+                            .await
+                            .unwrap();
+                    }
                     LorawanResponse::JoinRequestSending => (),
                     LorawanResponse::UplinkSending(_) => (),
                 },
+
                 Err(err) => match err {
                     lorawan::Error::Radio(_) => (),
                     lorawan::Error::Session(e) => {
