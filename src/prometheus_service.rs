@@ -72,16 +72,44 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, ServReqError> 
     Ok(response)
 }
 
+struct Tracker {
+    success: CounterVec,
+    fail: CounterVec,
+    latency: HistogramVec,
+}
+
+impl Tracker {
+    fn new(label: &str, buckets: Vec<f64>) -> Tracker {
+
+        let success = register_counter_vec!(
+            opts!(format!("{}_success", label), "".to_string()),
+            &["oui"]
+        ).unwrap();
+
+        let fail = register_counter_vec!(
+            opts!(format!("{}_fail", label), "".to_string()),
+            &["oui"]
+        ).unwrap();
+
+        let latency = register_histogram_vec!(
+            format!("{}_latency", label),
+            "".to_string(),
+            &["oui"],
+            buckets
+        ).unwrap();
+
+        Tracker {
+            success,
+            fail,
+            latency,
+        }
+    }
+}
+
 struct Stats {
-    data_success: CounterVec,
-    data_fail: CounterVec,
-    data_response_latency: HistogramVec,
-    join_success: CounterVec,
-    join_fail: CounterVec,
-    join_response_latency: HistogramVec,
-    http_uplink_success: CounterVec,
-    http_uplink_fail: CounterVec,
-    http_uplink_latency: HistogramVec,
+    data: Tracker,
+    join: Tracker,
+    http_uplink: Tracker,
 }
 
 pub struct PrometheusBuilder {
@@ -120,79 +148,11 @@ impl PrometheusBuilder {
     }
 
     pub fn build(self) -> Prometheus {
-        let data_success = register_counter_vec!(
-            opts!("data_success", "Total number of packets sent"),
-            &["oui"]
-        )
-        .unwrap();
-
-        let data_fail = register_counter_vec!(
-            opts!("data_fail", "Total number of failed data packets"),
-            &["oui"]
-        )
-        .unwrap();
-
-        let data_response_latency = register_histogram_vec!(
-            "data_response_latency",
-            "Time remaining before timeout",
-            &["oui"],
-            vec![0.1, 0.20, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        )
-        .unwrap();
-
-        let join_success = register_counter_vec!(
-            opts!("join_success", "Total number of packets sent"),
-            &["oui"]
-        )
-        .unwrap();
-
-        let join_fail = register_counter_vec!(
-            opts!("join_fail", "Total number of failed join packets"),
-            &["oui"]
-        )
-        .unwrap();
-
-        let join_response_latency = register_histogram_vec!(
-            "join_response_latency",
-            "Time remaining before rx timeout in secs",
-            &["oui"],
-            vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
-        )
-        .unwrap();
-
-        let http_uplink_success = register_counter_vec!(
-            opts!(
-                "http_uplink_success",
-                "Total number of successful HTTP uplinks"
-            ),
-            &["oui"]
-        )
-        .unwrap();
-
-        let http_uplink_fail = register_counter_vec!(
-            opts!("http_uplink_fail", "Total number of failed HTTP uplinks"),
-            &["oui"]
-        )
-        .unwrap();
-
-        let http_uplink_latency = register_histogram_vec!(
-            "http_uplink_latency",
-            "Time it took for uplink to traverse entire stack, including local LoRaWAN and UDP",
-            &["oui"],
-            vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
-        )
-        .unwrap();
 
         let stats = Stats {
-            data_success,
-            data_fail,
-            data_response_latency,
-            join_success,
-            join_fail,
-            join_response_latency,
-            http_uplink_success,
-            http_uplink_fail,
-            http_uplink_latency,
+            data: Tracker::new("data", vec![0.1, 0.20, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]),
+            join:Tracker::new("join", vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]),
+            http_uplink: Tracker::new("http_uplink", vec![0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]),
         };
 
         Prometheus {
@@ -216,35 +176,35 @@ impl Prometheus {
                             Stat::DownlinkResponse(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
-                                    .data_response_latency
+                                    .data.latency
                                     .with_label_values(&label)
                                     .observe(in_seconds);
-                                stats.data_success.with_label_values(&label).inc();
+                                stats.data.success.with_label_values(&label).inc();
                             }
                             Stat::DownlinkTimeout => {
-                                stats.data_fail.with_label_values(&label).inc();
+                                stats.data.fail.with_label_values(&label).inc();
                             }
                             Stat::JoinResponse(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
-                                    .join_response_latency
+                                    .join.latency
                                     .with_label_values(&label)
                                     .observe(in_seconds);
-                                stats.join_success.with_label_values(&label).inc();
+                                stats.join.success.with_label_values(&label).inc();
                             }
                             Stat::JoinTimeout => {
-                                stats.join_fail.with_label_values(&label).inc();
+                                stats.join.fail.with_label_values(&label).inc();
                             }
                             Stat::HttpUplink(t) => {
                                 let in_seconds = t as f64 / 1000.0;
                                 stats
-                                    .http_uplink_latency
+                                    .http_uplink.latency
                                     .with_label_values(&label)
                                     .observe(in_seconds);
-                                stats.http_uplink_success.with_label_values(&label).inc();
+                                stats.http_uplink.success.with_label_values(&label).inc();
                             }
                             Stat::HttpUplinkTimeout => {
-                                stats.http_uplink_fail.with_label_values(&label).inc();
+                                stats.http_uplink.fail.with_label_values(&label).inc();
                                 println!("\tHttpUplinkTimeout");
                             }
                         }
