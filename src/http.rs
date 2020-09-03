@@ -15,14 +15,14 @@ pub use tokio::{
 };
 
 #[derive(Debug)]
-pub enum Message {
-    ExpectUplink(ExpectUplink),
-    ExpectTimeout(ExpectUplink),
-    ReceivedUplink(ReceivedUplink),
+pub enum UplinkMessage {
+    Expect(UplinkExpect),
+    ExpectTimeout(UplinkExpect),
+    Received(UplinkedReceived),
 }
 
 #[derive(Debug, Clone)]
-pub struct ExpectUplink {
+pub struct UplinkExpect {
     device: config::Device,
     t: u128,
     payload: Vec<u8>,
@@ -30,17 +30,17 @@ pub struct ExpectUplink {
     fcnt: u32,
 }
 
-impl ExpectUplink {
+impl UplinkExpect {
     pub fn new(
         device: config::Device,
         t: u128,
         input_payload: &[u8],
         fport: u8,
         fcnt: u32,
-    ) -> ExpectUplink {
+    ) -> UplinkExpect {
         let mut payload = Vec::new();
         payload.extend(input_payload);
-        ExpectUplink {
+        UplinkExpect {
             device,
             t,
             payload,
@@ -59,7 +59,7 @@ impl ExpectUplink {
 }
 
 #[derive(Debug)]
-pub struct ReceivedUplink {
+pub struct UplinkedReceived {
     app_eui: String,
     dev_eui: String,
     payload: Vec<u8>,
@@ -67,9 +67,9 @@ pub struct ReceivedUplink {
     fcnt: u32,
 }
 
-impl ReceivedUplink {
-    fn from_http_uplink(data: &DataIn) -> ReceivedUplink {
-        ReceivedUplink {
+impl UplinkedReceived {
+    fn from_http_uplink(data: &DataIn) -> UplinkedReceived {
+        UplinkedReceived {
             app_eui: data.app_eui.clone(),
             dev_eui: data.dev_eui.clone(),
             payload: base64::decode(&data.payload).unwrap(),
@@ -85,8 +85,8 @@ impl ReceivedUplink {
 
 #[derive(Debug)]
 pub struct Server {
-    receiver: Receiver<Message>,
-    sender: Sender<Message>,
+    receiver: Receiver<UplinkMessage>,
+    sender: Sender<UplinkMessage>,
     prometheus: Option<Sender<prometheus::Message>>,
 }
 
@@ -109,7 +109,7 @@ struct Downlink {
 lazy_static! {
     // this sender allows the data_received function to dispatch messages
     // to the task which compares Expected and Received messages
-    static ref SENDER: Mutex<Option<Sender<Message >>> = Mutex::new(None);
+    static ref SENDER: Mutex<Option<Sender<UplinkMessage >>> = Mutex::new(None);
 }
 
 async fn data_received(request: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -129,7 +129,7 @@ async fn data_received(request: Request<Body>) -> Result<Response<Body>, Infalli
 
     if let Some(sender) = sender_mutex {
         sender
-            .send(Message::ReceivedUplink(ReceivedUplink::from_http_uplink(
+            .send(UplinkMessage::Received(UplinkedReceived::from_http_uplink(
                 &data,
             )))
             .await
@@ -153,7 +153,7 @@ impl Server {
         }
     }
 
-    pub fn get_sender(&self) -> Sender<Message> {
+    pub fn get_sender(&self) -> Sender<UplinkMessage> {
         self.sender.clone()
     }
 
@@ -174,19 +174,19 @@ impl Server {
                 println!("event! {:?}", event);
 
                 match event {
-                    Message::ExpectUplink(expected) => {
+                    UplinkMessage::Expect(expected) => {
                         // track this expected event
                         expected_tracker.insert(expected.hash_key(), expected.clone());
                         let mut sender = self.sender.clone();
                         tokio::spawn(async move {
                             delay_for(Duration::from_secs(5)).await;
                             sender
-                                .send(Message::ExpectTimeout(expected.clone()))
+                                .send(UplinkMessage::ExpectTimeout(expected.clone()))
                                 .await
                                 .unwrap();
                         });
                     }
-                    Message::ExpectTimeout(timeout) => {
+                    UplinkMessage::ExpectTimeout(timeout) => {
                         // if hashmap returns item, it still exists
                         if let Some(expected) = expected_tracker.remove(&timeout.hash_key()) {
                             if let Some(sender) = &mut prometheus {
@@ -200,7 +200,7 @@ impl Server {
                             }
                         }
                     }
-                    Message::ReceivedUplink(received) => {
+                    UplinkMessage::Received(received) => {
                         // if hashmap returns item, timeout has not fired yet
                         if let Some(expected) = expected_tracker.remove(&received.hash_key()) {
                             if let Some(sender) = &mut prometheus {

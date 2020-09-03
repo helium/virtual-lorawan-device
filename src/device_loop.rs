@@ -107,7 +107,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
     mut lorawan_sender: Sender<IntermediateEvent>,
     mut lorawan: LorawanDevice<UdpRadio, C>,
     mut prometheus: Option<Sender<prometheus::Message>>,
-    mut http: Option<Sender<http::Message>>,
+    mut http: Option<Sender<http::UplinkMessage>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     lorawan_sender
         .try_send(IntermediateEvent::NewSession)
@@ -167,7 +167,7 @@ pub async fn run<C: lorawan_encoding::keys::CryptoFactory + Default>(
                         let device = lorawan.get_radio().config().clone();
 
                         http_sender
-                            .send(http::Message::ExpectUplink(http::ExpectUplink::new(
+                            .send(http::UplinkMessage::Expect(http::UplinkExpect::new(
                                 device,
                                 INSTANT.elapsed().as_millis(),
                                 &data,
