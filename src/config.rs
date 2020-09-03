@@ -50,7 +50,7 @@ pub struct Device {
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum Integration {
-    Http,
+    HttpUplink,
     Mqtt,
 }
 
@@ -84,7 +84,7 @@ impl Device {
     pub fn has_http_integration(&self) -> bool {
         if let Some(integrations) = &self.integrations {
             for integration in integrations {
-                if let Integration::Http = integration {
+                if let Integration::HttpUplink = integration {
                     return true;
                 }
             }
