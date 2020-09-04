@@ -352,7 +352,7 @@ impl Downlinker {
         let url = self.url;
 
         // give a delay for the Join to happen
-        delay_for(Duration::from_secs(30)).await;
+        delay_for(Duration::from_secs(10)).await;
 
         tokio::spawn(async move {
             loop {

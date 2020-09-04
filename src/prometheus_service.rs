@@ -81,6 +81,17 @@ struct Tracker {
 }
 
 impl Tracker {
+    fn handle_success(&self, t: u64, label: &[&str]) {
+        let in_seconds = t as f64 / 1000.0;
+        self.latency.with_label_values(&label).observe(in_seconds);
+        self.success.with_label_values(label).inc();
+    }
+    fn handle_timeout(&self, label: &[&str]) {
+        self.fail.with_label_values(label).inc();
+    }
+}
+
+impl Tracker {
     fn new(label: &str, buckets: Vec<f64>) -> Tracker {
         let success = register_counter_vec!(
             opts!(
@@ -188,52 +199,28 @@ impl Prometheus {
                         let label = [oui.as_str()];
                         match stat {
                             Stat::DownlinkResponse(t) => {
-                                let in_seconds = t as f64 / 1000.0;
-                                stats
-                                    .data
-                                    .latency
-                                    .with_label_values(&label)
-                                    .observe(in_seconds);
-                                stats.data.success.with_label_values(&label).inc();
+                                stats.data.handle_success(t, &label);
                             }
                             Stat::DownlinkTimeout => {
-                                stats.data.fail.with_label_values(&label).inc();
+                                stats.data.handle_timeout(&label);
                             }
                             Stat::JoinResponse(t) => {
-                                let in_seconds = t as f64 / 1000.0;
-                                stats
-                                    .join
-                                    .latency
-                                    .with_label_values(&label)
-                                    .observe(in_seconds);
-                                stats.join.success.with_label_values(&label).inc();
+                                stats.join.handle_success(t, &label);
                             }
                             Stat::JoinTimeout => {
-                                stats.join.fail.with_label_values(&label).inc();
+                                stats.join.handle_timeout(&label);
                             }
                             Stat::HttpUplink(t) => {
-                                let in_seconds = t as f64 / 1000.0;
-                                stats
-                                    .http_uplink
-                                    .latency
-                                    .with_label_values(&label)
-                                    .observe(in_seconds);
-                                stats.http_uplink.success.with_label_values(&label).inc();
+                                stats.http_uplink.handle_success(t, &label);
                             }
                             Stat::HttpUplinkTimeout => {
-                                stats.http_uplink.fail.with_label_values(&label).inc();
+                                stats.http_uplink.handle_timeout(&label);
                             }
                             Stat::HttpDownlink(t) => {
-                                let in_seconds = t as f64 / 1000.0;
-                                stats
-                                    .http_downlink
-                                    .latency
-                                    .with_label_values(&label)
-                                    .observe(in_seconds);
-                                stats.http_downlink.success.with_label_values(&label).inc();
+                                stats.http_downlink.handle_success(t, &label);
                             }
                             Stat::HttpDownlinkTimeout => {
-                                stats.http_downlink.fail.with_label_values(&label).inc();
+                                stats.http_downlink.handle_timeout(&label);
                             }
                         }
                     }
