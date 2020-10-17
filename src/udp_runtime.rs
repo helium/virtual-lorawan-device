@@ -180,9 +180,7 @@ impl UdpRuntimeTx {
                                 push_data.random_token = super::get_random_u32() as u16;
                             }
                             Up::PullData(_) => (),
-                            Up::TxAck(ref mut tx_ack) => {
-                                tx_ack.random_token = super::get_random_u32() as u16;
-                            }
+                            Up::TxAck(_) => (),
                         }
                     }
                     Packet::Down(_) => panic!("Should not be sending any down packets"),
