@@ -3,7 +3,7 @@ use super::*;
 use lorawan_device::{radio, region, Device, Event as LorawanEvent, Response as LorawanResponse};
 use lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto;
 use udp_radio::UdpRadio;
-use udp_radio::{IntermediateEvent, Receiver, Sender};
+pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
 
 mod udp_radio;
 
@@ -37,7 +37,7 @@ impl<'a> VirtualDevice<'a> {
         }
     }
 
-    pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(mut self) -> Result<()> {
         // Kickstart "activity" by trying to join
         self.sender
             .send(IntermediateEvent::NewSession)

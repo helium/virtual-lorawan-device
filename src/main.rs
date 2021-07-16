@@ -4,7 +4,10 @@ use std::time::Instant;
 
 use structopt::StructOpt;
 
+mod error;
 mod virtual_device;
+
+pub use error::Result;
 
 pub struct Credentials {
     deveui: [u8; 8],
@@ -13,7 +16,7 @@ pub struct Credentials {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let mac_address = [0, 0, 0, 0, 4, 3, 2, 1];
     let cli = Opt::from_args();
     let host = SocketAddr::from_str(cli.host.as_str())?;
