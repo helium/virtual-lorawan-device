@@ -1,6 +1,5 @@
 use super::{Result, PathBuf};
 use config::{Config, File};
-use hex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -14,7 +13,6 @@ impl Settings {
     /// Load Settings from a given path. Settings are loaded from a default.toml
     /// file in the given path, followed by merging in an optional settings.toml
     /// in the same folder.
-
     pub fn new(path: &PathBuf) -> Result<Settings> {
         let mut c = Config::new();
         let default_file = path.join("default.toml");
