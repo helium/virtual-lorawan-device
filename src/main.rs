@@ -1,4 +1,9 @@
-use std::{net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    str::FromStr,
+    time::Instant,
+};
 use structopt::StructOpt;
 
 mod error;
