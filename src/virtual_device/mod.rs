@@ -19,22 +19,22 @@ impl<'a> VirtualDevice<'a> {
         host: SocketAddr,
         mac_address: [u8; 8],
         credentials: Credentials,
-    ) -> VirtualDevice<'a> {
+    ) -> Result<VirtualDevice<'a>> {
         let (radio, receiver, sender) = UdpRadio::new(instant, mac_address, host).await;
         let device: Device<udp_radio::UdpRadio, LorawanCrypto> = Device::new(
             region::US915::subband(2).into(),
             radio,
-            credentials.deveui,
-            credentials.appeui,
-            credentials.appkey,
+            credentials.deveui_cloned_into_buf()?,
+            credentials.appeui_cloned_into_buf()?,
+            credentials.appkey_cloned_into_buf()?,
             rand::random::<u32>,
         );
 
-        VirtualDevice {
+        Ok(VirtualDevice {
             device,
             receiver,
             sender,
-        }
+        })
     }
 
     pub async fn run(mut self) -> Result<()> {

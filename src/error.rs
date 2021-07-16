@@ -9,4 +9,8 @@ pub enum Error {
     UdpRadioClosed(#[from] tokio::sync::mpsc::error::SendError<virtual_device::IntermediateEvent>),
     #[error("unable to parse socket address")]
     AddrParse(#[from] std::net::AddrParseError),
+    #[error("configuration file error")]
+    Config(#[from] config::ConfigError),
+    #[error("invalid hex input")]
+    InvalidHex(#[from] hex::FromHexError),
 }
