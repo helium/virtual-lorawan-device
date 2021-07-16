@@ -36,11 +36,9 @@ async fn main() -> Result<()> {
         });
     }
 
-    // Loop the main thread
-    loop {
-        use tokio::time::{sleep, Duration};
-        sleep(Duration::from_secs(10)).await;
-    }
+    tokio::signal::ctrl_c().await?;
+    println!("User exit via ctrl C");
+    Ok(())
 }
 
 #[derive(Debug, StructOpt)]
