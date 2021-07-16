@@ -2,16 +2,12 @@
 use super::*;
 use lorawan_device::{radio, Timings};
 use semtech_udp::client_runtime;
-use semtech_udp::{
-    push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor,
-};
+use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor};
 use std::{
     marker::PhantomData,
-    time::{Duration, Instant}
+    time::{Duration, Instant},
 };
-use tokio::sync::{
-    mpsc::{self, Sender},
-};
+use tokio::sync::mpsc::{self, Sender};
 use tokio::time::sleep;
 
 #[derive(Debug)]
@@ -46,32 +42,26 @@ impl<'a> UdpRadio<'a> {
             host.to_string(),
             outbound.to_string()
         );
-        let udp_runtime = UdpRuntime::new(mac.clone(), outbound, host).await.unwrap();
-
+        let udp_runtime = UdpRuntime::new(mac, outbound, host).await.unwrap();
 
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
 
         let (mut udp_receiver, udp_sender) = (udp_runtime.subscribe(), udp_runtime.publish_to());
 
-
         let udp_lorawan_sender = lorawan_sender.clone();
         tokio::spawn(async move {
-            let time = time.clone();
             loop {
                 let event = udp_receiver.recv().await.unwrap();
                 println!("{:?}", event);
-                match event {
-                    semtech_udp::Packet::Down(down) => {
-                        match down {
-                            semtech_udp::Down::PullResp(txpk) => {
-                                udp_lorawan_sender.send(IntermediateEvent::UdpRx(txpk, time.elapsed().as_millis() as u64)).await.unwrap();
-                            }
-                            _=>(),
-                        }
-                    }
-                    _ => (),
+                if let semtech_udp::Packet::Down(semtech_udp::Down::PullResp(txpk)) = event {
+                    udp_lorawan_sender
+                        .send(IntermediateEvent::UdpRx(
+                            txpk,
+                            time.elapsed().as_millis() as u64,
+                        ))
+                        .await
+                        .unwrap();
                 }
-
             }
         });
 
@@ -92,7 +82,7 @@ impl<'a> UdpRadio<'a> {
                 window_start: 0,
             },
             lorawan_receiver,
-            lorawan_sender
+            lorawan_sender,
         )
     }
 
@@ -105,8 +95,9 @@ impl<'a> UdpRadio<'a> {
         tokio::spawn(async move {
             sleep(Duration::from_millis(delay as u64)).await;
             sender
-                .send(IntermediateEvent::Timeout(timeout_id)).await.unwrap()
-
+                .send(IntermediateEvent::Timeout(timeout_id))
+                .await
+                .unwrap()
         });
         self.window_start = delay;
     }
@@ -118,7 +109,7 @@ impl<'a> UdpRadio<'a> {
 use heapless::Vec as HVec;
 #[derive(Default, Debug)]
 pub struct Buffer {
-    data: HVec<u8, 255>
+    data: HVec<u8, 255>,
 }
 
 impl lorawan_device::radio::PhyRxTxBuf for Buffer {
@@ -146,7 +137,7 @@ use lorawan_device::radio::{
     Error as LoraError, Event as LoraEvent, Response as LoraResponse, RxQuality,
 };
 
-impl <'a> radio::PhyRxTx for UdpRadio<'a> {
+impl<'a> radio::PhyRxTx for UdpRadio<'a> {
     type PhyError = Error;
     type PhyResponse = Response;
     type PhyEvent = Box<semtech_udp::pull_resp::Packet>;
@@ -212,7 +203,7 @@ impl <'a> radio::PhyRxTx for UdpRadio<'a> {
     }
 }
 
-impl<'a> Timings for UdpRadio <'a>{
+impl<'a> Timings for UdpRadio<'a> {
     fn get_rx_window_offset_ms(&self) -> i32 {
         20
     }
@@ -222,9 +213,7 @@ impl<'a> Timings for UdpRadio <'a>{
 }
 
 #[derive(Debug)]
-pub enum Error {
-
-}
+pub enum Error {}
 
 #[derive(Debug)]
 struct Settings {
