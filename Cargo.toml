@@ -21,4 +21,4 @@ rand = "*"
 
 [dependencies.tokio]
 version = "1"
-features = ["macros", "sync", "time", "rt-multi-thread"]
+features = ["macros", "sync", "time", "rt-multi-thread", "signal"]
