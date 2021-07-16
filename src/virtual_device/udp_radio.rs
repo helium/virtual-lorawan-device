@@ -1,14 +1,25 @@
 #![macro_use]
-use super::*;
+use crate::SocketAddr;
+
 use lorawan_device::{radio, Timings};
-use semtech_udp::client_runtime;
+use semtech_udp::client_runtime::{self, UdpRuntime};
 use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor};
 use std::{
     marker::PhantomData,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::{self, Sender};
+pub use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::sleep;
+
+#[derive(Debug)]
+// I need some intermediate event because of Lifetimes
+// maybe there's a cleaner way of doing this
+pub enum IntermediateEvent {
+    UdpRx(Box<semtech_udp::pull_resp::Packet>, u64),
+    NewSession,
+    Timeout(usize),
+    SendPacket(Vec<u8>, u8, bool),
+}
 
 #[derive(Debug)]
 pub enum Response {}
@@ -17,7 +28,7 @@ pub enum Response {}
 pub struct UdpRadio<'a> {
     mac: [u8; 8],
     udp_sender: Sender<client_runtime::TxMessage>,
-    lorawan_sender: tokio::sync::mpsc::Sender<IntermediateEvent>,
+    lorawan_sender: Sender<IntermediateEvent>,
     rx_buffer: Buffer,
     time: Instant,
     settings: Settings,
