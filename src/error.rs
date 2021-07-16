@@ -1,0 +1,12 @@
+use crate::*;
+use thiserror::Error;
+
+pub type Result<T = ()> = std::result::Result<T, Error>;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("udp_radio receive closed or overflowed")]
+    UdpRadioClosed(#[from] tokio::sync::mpsc::error::SendError<virtual_device::IntermediateEvent>),
+    #[error("unable to parse socket address")]
+    AddrParse(#[from] std::net::AddrParseError),
+}
