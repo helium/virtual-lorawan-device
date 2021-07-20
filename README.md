@@ -6,7 +6,9 @@ If you need the legacy project, please see [here](https://github.com/helium/virt
 
 ## Configuration
 
-You'll want to create a file called `settings.toml` and define one more devices.
+You'll want to create a file called `settings.toml` and define one more devices. By default,
+this file is expected in the `settings` directory from where the application is launched. This
+may be overriden with the `--config` option.
 
 For example:
 ```toml

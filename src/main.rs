@@ -13,6 +13,13 @@ mod virtual_device;
 pub use error::Result;
 pub use settings::Credentials;
 
+#[derive(Debug, StructOpt)]
+#[structopt(name = "virtual-lorawan-device", about = "LoRaWAN test device utility")]
+pub struct Opt {
+    #[structopt(short, long, default_value = "./settings")]
+    pub settings: PathBuf,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Opt::from_args();
@@ -39,11 +46,4 @@ async fn main() -> Result<()> {
     tokio::signal::ctrl_c().await?;
     println!("User exit via ctrl C");
     Ok(())
-}
-
-#[derive(Debug, StructOpt)]
-#[structopt(name = "virtual-lorawan-device", about = "LoRaWAN test device utility")]
-pub struct Opt {
-    #[structopt(short, long, default_value = "./settings")]
-    pub config: PathBuf,
 }
