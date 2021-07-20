@@ -8,14 +8,17 @@ edition = "2018"
 anyhow = "1"
 env_logger = "0"
 heapless = "0.7"
+hex = "*"
 log = "0"
 lorawan-encoding = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 lorawan-device = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 semtech-udp = { version = "0.5", features = ["client"] }
+serde = "*"
 structopt = "*"
 thiserror = "1"
+config = {version="0", default-features=false, features=["toml"]}
 rand = "*"
 
 [dependencies.tokio]
 version = "1"
-features = ["macros", "sync", "time", "rt-multi-thread"]
+features = ["macros", "sync", "time", "rt-multi-thread", "signal"]
