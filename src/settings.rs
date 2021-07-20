@@ -1,10 +1,7 @@
 use super::Result;
 use config::{Config, File};
 use serde::{Deserialize, Serialize};
-use std::{
-    path::Path,
-    collections::HashMap,
-};
+use std::{collections::HashMap, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
