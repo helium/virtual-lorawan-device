@@ -1,7 +1,10 @@
-use super::{PathBuf, Result};
+use super::Result;
 use config::{Config, File};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{
+    path::Path,
+    collections::HashMap,
+};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
@@ -13,7 +16,7 @@ impl Settings {
     /// Load Settings from a given path. Settings are loaded from a default.toml
     /// file in the given path, followed by merging in an optional settings.toml
     /// in the same folder.
-    pub fn new(path: &PathBuf) -> Result<Settings> {
+    pub fn new(path: &Path) -> Result<Settings> {
         let mut c = Config::new();
         let default_file = path.join("default.toml");
         // Load default config and merge in overrides
