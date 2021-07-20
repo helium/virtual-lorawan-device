@@ -13,4 +13,6 @@ pub enum Error {
     Config(#[from] config::ConfigError),
     #[error("invalid hex input")]
     InvalidHex(#[from] hex::FromHexError),
+    #[error("io error")]
+    IoError(#[from] std::io::Error),
 }

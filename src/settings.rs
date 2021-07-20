@@ -1,4 +1,4 @@
-use super::{Result, PathBuf};
+use super::{PathBuf, Result};
 use config::{Config, File};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

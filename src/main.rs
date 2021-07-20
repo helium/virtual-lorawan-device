@@ -1,16 +1,11 @@
-use std::{
-    net::SocketAddr,
-    path::PathBuf,
-    str::FromStr,
-    time::Instant,
-};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
 use structopt::StructOpt;
 
 mod error;
 mod settings;
 mod virtual_device;
 
-pub use error::Result;
+pub use error::{Error, Result};
 pub use settings::Credentials;
 
 #[derive(Debug, StructOpt)]
@@ -24,7 +19,7 @@ pub struct Opt {
 async fn main() -> Result<()> {
     let cli = Opt::from_args();
     let instant = Instant::now();
-    let settings = settings::Settings::new(&cli.config)?;
+    let settings = settings::Settings::new(&cli.settings)?;
     let host = SocketAddr::from_str(settings.host.as_str())?;
 
     for (label, device) in settings.devices {
