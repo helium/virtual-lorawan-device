@@ -1,6 +1,7 @@
 use super::*;
 
 use lorawan_device::{radio, region, Device, Event as LorawanEvent, Response as LorawanResponse};
+
 use lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto;
 use udp_radio::UdpRadio;
 pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
@@ -64,11 +65,12 @@ impl<'a> VirtualDevice<'a> {
                         }
                     }
                     IntermediateEvent::SendPacket(data, fport, confirmed) => {
-                        info!("Sending packet {}", data.len());
+                        info!("Sending packet on fport {} of len {}", fport, data.len());
                         lorawan.send(&data, fport, confirmed)
                     }
                     IntermediateEvent::UdpRx(frame, _) => lorawan
-                        .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame))),
+                            .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame)))
+                    ,
                 }
             };
             lorawan = new_state;
@@ -78,7 +80,7 @@ impl<'a> VirtualDevice<'a> {
                     Ok(response) => match response {
                         LorawanResponse::TimeoutRequest(ms) => {
                             lorawan.get_radio().timer(ms).await;
-                            info!("TimeoutRequest: {:?}", ms)
+                            debug!("TimeoutRequest: {:?}", ms)
                         }
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
@@ -94,7 +96,7 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::NoAck => {
                             send_uplink = true;
-                            warn!("RxWindow expired, expected ACK to confirmed uplink not received\r\n")
+                            warn!("RxWindow expired, expected ACK to confirmed uplink not received")
                         }
                         LorawanResponse::NoJoinAccept => {
                             self.sender.send(IntermediateEvent::NewSession).await?;

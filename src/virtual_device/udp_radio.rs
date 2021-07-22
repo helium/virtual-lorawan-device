@@ -167,6 +167,7 @@ impl std::convert::AsRef<[u8]> for Buffer {
 use lorawan_device::radio::{
     Error as LoraError, Event as LoraEvent, Response as LoraResponse, RxQuality,
 };
+use lorawan_device::radio::PhyRxTxBuf;
 
 impl<'a> radio::PhyRxTx for UdpRadio<'a> {
     type PhyError = Error;
@@ -225,9 +226,9 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
             }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
             radio::Event::PhyEvent(packet) => {
+                self.rx_buffer.extend(packet.data.txpk.data.as_slice());
                 let ack = packet.into_ack_for_gateway(semtech_udp::MacAddress::new(&self.mac));
                 let sender = self.udp_sender.clone();
-
                 // we are not in an async context so we must spawn this off
                 tokio::task::spawn(async move { sender.send(ack.into()).await });
                 Ok(LoraResponse::RxDone(RxQuality::new(-120, 5)))
