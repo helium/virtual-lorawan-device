@@ -1,5 +1,5 @@
 #![macro_use]
-use crate::SocketAddr;
+use crate::{info, SocketAddr};
 
 use lorawan_device::{radio, Timings};
 use semtech_udp::client_runtime::{self, UdpRuntime};
@@ -48,7 +48,7 @@ impl<'a> UdpRadio<'a> {
         tokio::sync::mpsc::Sender<IntermediateEvent>,
     ) {
         let outbound = SocketAddr::from(([0, 0, 0, 0], 0));
-        println!(
+        info!(
             "Connecting to server {} from {}",
             host.to_string(),
             outbound.to_string()
@@ -63,7 +63,6 @@ impl<'a> UdpRadio<'a> {
         tokio::spawn(async move {
             loop {
                 let event = udp_receiver.recv().await.unwrap();
-                println!("{:?}", event);
                 if let semtech_udp::Packet::Down(semtech_udp::Down::PullResp(txpk)) = event {
                     udp_lorawan_sender
                         .send(IntermediateEvent::UdpRx(
