@@ -3,22 +3,23 @@ name = "virtual-lorawan-device"
 version = "0.2.0"
 authors = ["lthiery <thiery.louis@gmail.com>"]
 edition = "2018"
+publish = false
 
 [dependencies]
 anyhow = "1"
 env_logger = "0"
 heapless = "0.7"
-hex = "*"
+hex = "0"
 log = "0"
 lorawan-encoding = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 lorawan-device = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 semtech-udp = { version = "0.5", features = ["client"] }
-serde = "*"
-structopt = "*"
+serde = "1"
+structopt = "0"
 thiserror = "1"
 config = {version="0", default-features=false, features=["toml"]}
-rand = "*"
-typenum = "*"
+rand = "0"
+
 [dependencies.tokio]
 version = "1"
 features = ["macros", "sync", "time", "rt-multi-thread", "signal"]

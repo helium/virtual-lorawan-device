@@ -949,7 +949,6 @@ dependencies = [
  "structopt",
  "thiserror",
  "tokio",
- "typenum",
 ]
 
 [[package]]
