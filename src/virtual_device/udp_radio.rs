@@ -68,6 +68,7 @@ impl<'a> UdpRadio<'a> {
                 if let semtech_udp::Packet::Down(semtech_udp::Down::PullResp(pull_resp)) = event {
                     let udp_lorawan_sender = udp_lorawan_sender.clone();
                     match &pull_resp.data.txpk.tmst {
+                        // here we will hold the frame until the RxWindow begins
                         StringOrNum::N(n) => {
                             let scheduled_time = n / 1000;
                             let time = time.elapsed().as_millis() as u64;
