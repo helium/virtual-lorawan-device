@@ -69,8 +69,7 @@ impl<'a> VirtualDevice<'a> {
                         lorawan.send(&data, fport, confirmed)
                     }
                     IntermediateEvent::UdpRx(frame, _) => lorawan
-                            .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame)))
-                    ,
+                        .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame))),
                 }
             };
             lorawan = new_state;

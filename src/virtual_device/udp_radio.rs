@@ -164,10 +164,10 @@ impl std::convert::AsRef<[u8]> for Buffer {
     }
 }
 
+use lorawan_device::radio::PhyRxTxBuf;
 use lorawan_device::radio::{
     Error as LoraError, Event as LoraEvent, Response as LoraResponse, RxQuality,
 };
-use lorawan_device::radio::PhyRxTxBuf;
 
 impl<'a> radio::PhyRxTx for UdpRadio<'a> {
     type PhyError = Error;
