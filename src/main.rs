@@ -1,3 +1,4 @@
+use log::{debug, error, info, warn};
 use std::{net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
 use structopt::StructOpt;
 
@@ -17,6 +18,10 @@ pub struct Opt {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Default log level to INFO unless environment override
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "INFO"),
+    );
     let cli = Opt::from_args();
     let instant = Instant::now();
     let settings = settings::Settings::new(&cli.settings)?;
@@ -33,12 +38,12 @@ async fn main() -> Result<()> {
 
         tokio::spawn(async move {
             if let Err(e) = lorawan_app.run().await {
-                println!("{} device threw error: {:?}", label, e)
+                error!("{} device threw error: {:?}", label, e)
             }
         });
     }
 
     tokio::signal::ctrl_c().await?;
-    println!("User exit via ctrl C");
+    info!("User exit via ctrl C");
     Ok(())
 }

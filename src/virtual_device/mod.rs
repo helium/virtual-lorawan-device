@@ -64,7 +64,7 @@ impl<'a> VirtualDevice<'a> {
                         }
                     }
                     IntermediateEvent::SendPacket(data, fport, confirmed) => {
-                        println!("Sending packet {}", data.len());
+                        info!("Sending packet {}", data.len());
                         lorawan.send(&data, fport, confirmed)
                     }
                     IntermediateEvent::UdpRx(frame, _) => lorawan
@@ -78,45 +78,43 @@ impl<'a> VirtualDevice<'a> {
                     Ok(response) => match response {
                         LorawanResponse::TimeoutRequest(ms) => {
                             lorawan.get_radio().timer(ms).await;
-                            println!("TimeoutRequest: {:?}", ms)
+                            info!("TimeoutRequest: {:?}", ms)
                         }
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
-                            println!("Join success")
+                            info!("Join success")
                         }
                         LorawanResponse::ReadyToSend => {
                             send_uplink = true;
-                            println!("Ready to send")
+                            debug!("Ready to send")
                         }
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
-                            println!("Downlink received with FCnt = {}", fcnt_down)
+                            info!("Downlink received with FCnt = {}", fcnt_down)
                         }
                         LorawanResponse::NoAck => {
                             send_uplink = true;
-                            println!("RxWindow expired, expected ACK to confirmed uplink not received\r\n")
+                            warn!("RxWindow expired, expected ACK to confirmed uplink not received\r\n")
                         }
                         LorawanResponse::NoJoinAccept => {
                             self.sender.send(IntermediateEvent::NewSession).await?;
-
-                            println!("No Join Accept Received")
+                            warn!("No Join Accept Received")
                         }
                         LorawanResponse::SessionExpired => {
                             self.sender.send(IntermediateEvent::NewSession).await?;
-
-                            println!("SessionExpired. Created new Session")
+                            debug!("SessionExpired. Created new Session")
                         }
                         LorawanResponse::NoUpdate => {
-                            println!("NoUpdate")
+                            debug!("NoUpdate")
                         }
                         LorawanResponse::UplinkSending(fcnt_up) => {
-                            println!("Uplink with FCnt {}", fcnt_up)
+                            info!("Uplink with FCnt {}", fcnt_up)
                         }
                         LorawanResponse::JoinRequestSending => {
-                            println!("Join Request Sending")
+                            info!("Join Request Sending")
                         }
                     },
-                    Err(err) => println!("Error {:?}", err),
+                    Err(err) => error!("Error {:?}", err),
                 }
                 send_uplink
             };
