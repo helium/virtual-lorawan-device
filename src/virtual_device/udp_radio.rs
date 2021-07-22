@@ -226,6 +226,7 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
             }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
             radio::Event::PhyEvent(packet) => {
+                self.rx_buffer.clear();
                 self.rx_buffer.extend(packet.data.txpk.data.as_slice());
                 let ack = packet.into_ack_for_gateway(semtech_udp::MacAddress::new(&self.mac));
                 let sender = self.udp_sender.clone();

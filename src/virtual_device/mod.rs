@@ -65,7 +65,7 @@ impl<'a> VirtualDevice<'a> {
                         }
                     }
                     IntermediateEvent::SendPacket(data, fport, confirmed) => {
-                        info!("Sending packet on fport {} of len {}", fport, data.len());
+                        info!("Sending packet on fport {}", fport);
                         lorawan.send(&data, fport, confirmed)
                     }
                     IntermediateEvent::UdpRx(frame, _) => lorawan
