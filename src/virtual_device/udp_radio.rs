@@ -1,9 +1,9 @@
 #![macro_use]
-use crate::{info, SocketAddr};
+use crate::{info, warn, SocketAddr};
 
 use lorawan_device::{radio, Timings};
 use semtech_udp::client_runtime::{self, UdpRuntime};
-use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor};
+use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor, StringOrNum};
 use std::{
     marker::PhantomData,
     time::{Duration, Instant},
@@ -58,19 +58,40 @@ impl<'a> UdpRadio<'a> {
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
 
         let (mut udp_receiver, udp_sender) = (udp_runtime.subscribe(), udp_runtime.publish_to());
-
         let udp_lorawan_sender = lorawan_sender.clone();
+
+        // this task receives downlinks and sends them to the lorawan layer as if a PHY radio
+        // received the frame
         tokio::spawn(async move {
             loop {
                 let event = udp_receiver.recv().await.unwrap();
-                if let semtech_udp::Packet::Down(semtech_udp::Down::PullResp(txpk)) = event {
-                    udp_lorawan_sender
-                        .send(IntermediateEvent::UdpRx(
-                            txpk,
-                            time.elapsed().as_millis() as u64,
-                        ))
-                        .await
-                        .unwrap();
+                if let semtech_udp::Packet::Down(semtech_udp::Down::PullResp(pull_resp)) = event {
+                    let udp_lorawan_sender = udp_lorawan_sender.clone();
+                    match &pull_resp.data.txpk.tmst {
+                        StringOrNum::N(n) => {
+                            let scheduled_time = n / 1000;
+                            let time = time.elapsed().as_millis() as u64;
+                            if scheduled_time > time {
+                                let delay = scheduled_time - time as u64;
+                                tokio::spawn(async move {
+                                    sleep(Duration::from_millis(delay + 50)).await;
+                                    udp_lorawan_sender
+                                        .send(IntermediateEvent::UdpRx(pull_resp, time))
+                                        .await
+                                        .unwrap();
+                                });
+                            } else {
+                                let time_since_scheduled_time = time - scheduled_time;
+                                warn!(
+                                    "UDP packet received after tx time by {} ms",
+                                    time_since_scheduled_time
+                                );
+                            }
+                        }
+                        StringOrNum::S(_) => {
+                            warn!("Warning! UDP packet sent with \"immediate\"");
+                        }
+                    }
                 }
             }
         });
@@ -206,6 +227,8 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
             radio::Event::PhyEvent(packet) => {
                 let ack = packet.into_ack_for_gateway(semtech_udp::MacAddress::new(&self.mac));
                 let sender = self.udp_sender.clone();
+
+                // we are not in an async context so we must spawn this off
                 tokio::task::spawn(async move { sender.send(ack.into()).await });
                 Ok(LoraResponse::RxDone(RxQuality::new(-120, 5)))
             }
