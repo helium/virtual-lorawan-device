@@ -8,10 +8,14 @@ pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
 
 mod udp_radio;
 
+use prometheus::Counter;
+use prometheus::{labels, opts, register_counter};
+
 pub struct VirtualDevice<'a> {
     device: Device<UdpRadio<'a>, LorawanCrypto>,
     receiver: Receiver<IntermediateEvent>,
     sender: Sender<IntermediateEvent>,
+    counter: Counter
 }
 
 impl<'a> VirtualDevice<'a> {
@@ -30,11 +34,18 @@ impl<'a> VirtualDevice<'a> {
             credentials.appkey_cloned_into_buf()?,
             rand::random::<u32>,
         );
+        let counter: Counter = register_counter!(opts!(
+            format!("join_success"),
+            format!("joine success total"),
+            labels! {"dev_eui" => &credentials.dev_eui}
+        ))
+        .unwrap();
 
         Ok(VirtualDevice {
             device,
             receiver,
             sender,
+            counter,
         })
     }
 
@@ -83,6 +94,7 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
+                            self.counter.inc();
                             info!("Join success")
                         }
                         LorawanResponse::ReadyToSend => {
