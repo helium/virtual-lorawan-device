@@ -2,7 +2,7 @@ use prometheus::Counter;
 use prometheus::{labels, opts, register_counter};
 
 pub struct Metrics {
-    pub join_success_counter: Counter
+    pub join_success_counter: Counter,
 }
 
 impl Metrics {
