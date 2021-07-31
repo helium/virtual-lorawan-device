@@ -34,7 +34,7 @@ impl<'a> VirtualDevice<'a> {
             credentials.appkey_cloned_into_buf()?,
             rand::random::<u32>,
         );
-        let metrics = Metrics::new(&credentials.dev_eui);
+        let metrics = Metrics::new("1", &credentials.dev_eui);
 
         Ok(VirtualDevice {
             device,

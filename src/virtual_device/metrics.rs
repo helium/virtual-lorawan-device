@@ -6,12 +6,13 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(device_dev_eui: &str) -> Metrics {
+    pub fn new(oui: &str, device_dev_eui: &str) -> Metrics {
         Metrics {
             join_success_counter: register_counter!(opts!(
                 "join_success",
-                "joine success total",
-                labels! {"dev_eui" => device_dev_eui}
+                "join success total",
+                labels! {"oui" => oui,
+                "dev_eui" => device_dev_eui}
             ))
             .unwrap(),
         }
