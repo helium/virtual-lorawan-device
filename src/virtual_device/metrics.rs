@@ -10,7 +10,7 @@ impl Metrics {
         Metrics {
             join_success_counter: register_counter!(opts!(
                 "join_success",
-                "join success total",
+                "join success counter",
                 labels! {"oui" => oui,
                 "dev_eui" => device_dev_eui}
             ))
