@@ -9,8 +9,8 @@ impl Metrics {
     pub fn new(device_dev_eui: &str) -> Metrics {
         Metrics {
             join_success_counter: register_counter!(opts!(
-                format!("join_success"),
-                format!("joine success total"),
+                "join_success",
+                "joine success total",
                 labels! {"dev_eui" => device_dev_eui}
             ))
             .unwrap(),
