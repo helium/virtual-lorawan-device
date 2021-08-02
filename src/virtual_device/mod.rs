@@ -98,10 +98,12 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
+                            self.metrics.data_success_counter.inc();
                             info!("Downlink received with FCnt = {}", fcnt_down)
                         }
                         LorawanResponse::NoAck => {
                             send_uplink = true;
+                            self.metrics.data_fail_counter.inc();
                             warn!("RxWindow expired, expected ACK to confirmed uplink not received")
                         }
                         LorawanResponse::NoJoinAccept => {
