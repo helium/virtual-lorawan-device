@@ -3,7 +3,7 @@ use prometheus::{labels, opts, register_counter};
 
 pub struct Metrics {
     pub join_success_counter: Counter,
-    pub join_failure_counter: Counter,
+    pub join_fail_counter: Counter,
 }
 
 impl Metrics {
@@ -16,9 +16,9 @@ impl Metrics {
                 "dev_eui" => device_dev_eui}
             ))
             .unwrap(),
-            join_failure_counter: register_counter!(opts!(
-                "join_failure",
-                "join failure counter",
+            join_fail_counter: register_counter!(opts!(
+                "join_fail",
+                "join fail counter",
                 labels! {"oui" => oui,
                 "dev_eui" => device_dev_eui}
             ))

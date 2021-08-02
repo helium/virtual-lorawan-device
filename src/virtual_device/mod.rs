@@ -106,7 +106,7 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::NoJoinAccept => {
                             self.sender.send(IntermediateEvent::NewSession).await?;
-                            self.metrics.join_failure_counter.inc();
+                            self.metrics.join_fail_counter.inc();
                             warn!("No Join Accept Received")
                         }
                         LorawanResponse::SessionExpired => {
