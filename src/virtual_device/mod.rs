@@ -6,16 +6,12 @@ use lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto;
 use udp_radio::UdpRadio;
 pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
 
-mod metrics;
 mod udp_radio;
-
-use metrics::Metrics;
 
 pub struct VirtualDevice<'a> {
     device: Device<UdpRadio<'a>, LorawanCrypto>,
     receiver: Receiver<IntermediateEvent>,
     sender: Sender<IntermediateEvent>,
-    metrics: Metrics,
     time_elapsed: u64,
 }
 
@@ -35,14 +31,13 @@ impl<'a> VirtualDevice<'a> {
             credentials.appkey_cloned_into_buf()?,
             rand::random::<u32>,
         );
-        let metrics = Metrics::new("1", &credentials.dev_eui);
+        // let metrics = metrics;
         let time_elapsed = 0;
 
         Ok(VirtualDevice {
             device,
             receiver,
             sender,
-            metrics,
             time_elapsed,
         })
     }
@@ -98,8 +93,13 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
-                            self.metrics.join_success_counter.inc();
-                            info!("Join success, time_elapsed: {}", self.time_elapsed)
+                            let in_seconds = ((self.time_elapsed - 5000) as f64) / 1000.0;
+                            METRICS
+                                .join_latency
+                                .with_label_values(&["1"])
+                                .observe(in_seconds);
+                            METRICS.join_success_counter.inc();
+                            info!("Join success, time_elapsed: {}, seconds: {}", self.time_elapsed - 5000, in_seconds)
                         }
                         LorawanResponse::ReadyToSend => {
                             send_uplink = true;
@@ -107,21 +107,28 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
-                            self.metrics.data_success_counter.inc();
+                            let in_seconds = ((self.time_elapsed - 1000) as f64) / 1000.0;
+                            METRICS
+                                .data_latency
+                                .with_label_values(&["1"])
+                                .observe(in_seconds);
+                            METRICS.data_success_counter.inc();
                             info!(
-                                "Downlink received with FCnt = {}, time_elapsed: {}",
-                                fcnt_down, self.time_elapsed
+                                "Downlink received with FCnt = {}, time_elapsed: {}, seconds: {}",
+                                fcnt_down,
+                                self.time_elapsed - 1000,
+                                in_seconds
                             )
                         }
                         LorawanResponse::NoAck => {
                             send_uplink = true;
-                            self.metrics.data_fail_counter.inc();
+                            METRICS.data_fail_counter.inc();
                             warn!("RxWindow expired, expected ACK to confirmed uplink not received")
                         }
                         LorawanResponse::NoJoinAccept => {
                             time_start = Instant::now();
                             self.sender.send(IntermediateEvent::NewSession).await?;
-                            self.metrics.join_fail_counter.inc();
+                            METRICS.join_fail_counter.inc();
                             warn!("No Join Accept Received")
                         }
                         LorawanResponse::SessionExpired => {

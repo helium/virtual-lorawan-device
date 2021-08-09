@@ -1,10 +1,13 @@
 use log::{debug, error, info, warn};
 use std::{net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
 use structopt::StructOpt;
+use lazy_static::lazy_static;
+use metrics::Metrics;
 
 mod error;
 mod settings;
 mod virtual_device;
+mod metrics;
 
 pub use error::{Error, Result};
 pub use settings::Credentials;
@@ -21,6 +24,10 @@ use prometheus::{Encoder, TextEncoder};
 pub struct Opt {
     #[structopt(short, long, default_value = "./settings")]
     pub settings: PathBuf,
+}
+
+lazy_static! {
+    static ref METRICS: Metrics = Metrics::new("1");
 }
 
 async fn serve_req(_req: Request<Body>) -> Result<Response<Body>> {
@@ -48,7 +55,7 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>> {
 async fn main() -> Result<()> {
     // Default log level to INFO unless environment override
     env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "INFO"),
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "DEBUG"),
     );
     let cli = Opt::from_args();
     let instant = Instant::now();
