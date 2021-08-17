@@ -99,7 +99,11 @@ impl<'a> VirtualDevice<'a> {
                                 .with_label_values(&["1"])
                                 .observe(in_seconds);
                             METRICS.join_success_counter.inc();
-                            info!("Join success, time_elapsed: {}, seconds: {}", self.time_elapsed - 5000, in_seconds)
+                            info!(
+                                "Join success, time_elapsed: {}, seconds: {}",
+                                self.time_elapsed - 5000,
+                                in_seconds
+                            )
                         }
                         LorawanResponse::ReadyToSend => {
                             send_uplink = true;

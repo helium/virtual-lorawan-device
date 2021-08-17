@@ -12,7 +12,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(oui: &str ) -> Metrics {
+    pub fn new(oui: &str) -> Metrics {
         Metrics {
             oui: oui.to_string(),
             join_success_counter: register_counter!(opts!(
