@@ -1241,6 +1241,7 @@ dependencies = [
  "heapless 0.7.3",
  "hex",
  "hyper",
+ "lazy_static",
  "log",
  "lorawan-device",
  "lorawan-encoding",
