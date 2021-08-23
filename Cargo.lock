@@ -933,7 +933,7 @@ checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
 
 [[package]]
 name = "virtual-lorawan-device"
-version = "0.2.1"
+version = "0.2.2-alpha.0"
 dependencies = [
  "anyhow",
  "config",
