@@ -674,12 +674,13 @@ checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
 
 [[package]]
 name = "semtech-udp"
-version = "0.5.1"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48064c08a4c802d70c7958ce764c9ca611e541b2f1e59cbe14399880dc6cfc71"
+checksum = "18c81fd26f9512f1738b05defe09d6896a7280db54245519fd5ebc40ccc18cda"
 dependencies = [
  "arrayref",
  "base64",
+ "log",
  "num_enum",
  "rand",
  "serde",
