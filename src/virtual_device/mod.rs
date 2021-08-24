@@ -45,7 +45,7 @@ impl<'a> VirtualDevice<'a> {
             .await
             .unwrap();
 
-        let mut time_elapsed = None;
+        let mut time_remaining = None;
         let mut lorawan = self.device;
         loop {
             let event = self
@@ -70,7 +70,7 @@ impl<'a> VirtualDevice<'a> {
                         lorawan.send(&data, fport, confirmed)
                     }
                     IntermediateEvent::UdpRx(frame, time_received) => {
-                        time_elapsed = match frame.data.txpk.tmst {
+                        time_remaining = match frame.data.txpk.tmst {
                             semtech_udp::StringOrNum::N(tmst) => {
                                 Some(tmst as i64 - time_received as i64)
                             }
@@ -93,7 +93,7 @@ impl<'a> VirtualDevice<'a> {
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
 
-                            if let Some(time_elapsed) = time_elapsed.take() {
+                            if let Some(time_elapsed) = time_remaining.take() {
                                 let in_seconds = ((time_elapsed - 5000) as f64) / 1000.0;
                                 METRICS
                                     .join_latency
@@ -113,7 +113,7 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
-                            if let Some(time_elapsed) = time_elapsed.take() {
+                            if let Some(time_elapsed) = time_remaining.take() {
                                 let in_seconds = ((time_elapsed - 5000) as f64) / 1000.0;
                                 METRICS
                                     .data_latency
