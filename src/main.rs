@@ -1,13 +1,13 @@
+use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
+use metrics::Metrics;
 use std::{net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
 use structopt::StructOpt;
-use lazy_static::lazy_static;
-use metrics::Metrics;
 
 mod error;
+mod metrics;
 mod settings;
 mod virtual_device;
-mod metrics;
 
 pub use error::{Error, Result};
 pub use settings::Credentials;
