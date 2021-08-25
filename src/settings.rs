@@ -32,7 +32,7 @@ impl Settings {
 pub struct Device {
     mac: String,
     pub credentials: Credentials,
-    pub oui: Option<String>
+    pub oui: Option<String>,
 }
 
 impl Device {
