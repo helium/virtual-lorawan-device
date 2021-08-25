@@ -45,6 +45,7 @@ impl<'a> VirtualDevice<'a> {
             .await
             .unwrap();
 
+        let mut time_remaining = None;
         let mut lorawan = self.device;
         loop {
             let event = self
@@ -68,8 +69,16 @@ impl<'a> VirtualDevice<'a> {
                         info!("Sending packet on fport {}", fport);
                         lorawan.send(&data, fport, confirmed)
                     }
-                    IntermediateEvent::UdpRx(frame, _) => lorawan
-                        .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame))),
+                    IntermediateEvent::UdpRx(frame, time_received) => {
+                        time_remaining = match frame.data.txpk.tmst {
+                            semtech_udp::StringOrNum::N(tmst) => {
+                                Some(tmst as i64 - (time_received * 1000) as i64)
+                            }
+                            semtech_udp::StringOrNum::S(_) => None,
+                        };
+                        lorawan
+                            .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame)))
+                    }
                 }
             };
             lorawan = new_state;
@@ -83,7 +92,19 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
-                            info!("Join success")
+
+                            if let Some(time_remaining) = time_remaining.take() {
+                                let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
+                                METRICS
+                                    .join_latency
+                                    .with_label_values(&["1"])
+                                    .observe(time_remaining_seconds);
+                                info!(
+                                    "Join success, time remaining in seconds: {}",
+                                    time_remaining_seconds
+                                );
+                            }
+                            METRICS.join_success_counter.inc();
                         }
                         LorawanResponse::ReadyToSend => {
                             send_uplink = true;
@@ -91,14 +112,28 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
-                            info!("Downlink received with FCnt = {}", fcnt_down)
+                            if let Some(time_remaining) = time_remaining.take() {
+                                let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
+                                METRICS
+                                    .data_latency
+                                    .with_label_values(&["1"])
+                                    .observe(time_remaining_seconds);
+                                info!(
+                                "Downlink received with FCnt = {}, time remaining in seconds: {}",
+                                fcnt_down,
+                                time_remaining_seconds
+                            )
+                            }
+                            METRICS.data_success_counter.inc();
                         }
                         LorawanResponse::NoAck => {
                             send_uplink = true;
+                            METRICS.data_fail_counter.inc();
                             warn!("RxWindow expired, expected ACK to confirmed uplink not received")
                         }
                         LorawanResponse::NoJoinAccept => {
                             self.sender.send(IntermediateEvent::NewSession).await?;
+                            METRICS.join_fail_counter.inc();
                             warn!("No Join Accept Received")
                         }
                         LorawanResponse::SessionExpired => {

@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 anyhow = "1"
 env_logger = "0"
-heapless = "0.7"
+heapless = "0"
 hex = "0"
 log = "0"
 lorawan-encoding = { git = "https://github.com/ivajloip/rust-lorawan.git" }
@@ -19,6 +19,9 @@ structopt = "0"
 thiserror = "1"
 config = {version="0", default-features=false, features=["toml"]}
 rand = "0"
+prometheus = "0"
+hyper = { version = "0", features = ["full"] }
+lazy_static = "1"
 
 [dependencies.tokio]
 version = "1"
