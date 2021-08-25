@@ -39,7 +39,7 @@ impl<'a> VirtualDevice<'a> {
     }
 
     pub async fn run(mut self) -> Result<()> {
-        // Kickstart "activity" by trying to join
+        // Kickstart activity by trying to join
         self.sender
             .send(IntermediateEvent::NewSession)
             .await
