@@ -1,13 +1,14 @@
 use super::*;
 use hyper::{header::CONTENT_TYPE, Body, Request, Response};
 use log::{debug, warn};
-use prometheus::{labels, opts, register_counter, register_histogram_vec};
-use prometheus::{Counter, HistogramVec};
+use prometheus::{register_counter_vec, register_histogram_vec};
+use prometheus::{CounterVec, HistogramVec};
 use prometheus::{Encoder, TextEncoder};
 use tokio::sync::mpsc;
 
 pub type Sender = mpsc::Sender<Message>;
 
+#[derive(Debug)]
 pub enum Message {
     JoinSuccess(i64),
     JoinFail,
@@ -16,44 +17,47 @@ pub enum Message {
 }
 
 pub struct Metrics {
-    pub oui: String,
-    pub join_success_counter: Counter,
-    pub join_fail_counter: Counter,
-    pub data_success_counter: Counter,
-    pub data_fail_counter: Counter,
-    pub join_latency: HistogramVec,
-    pub data_latency: HistogramVec,
+    sender: mpsc::Sender<InternalMessage>,
+}
+
+#[derive(Debug)]
+enum InternalMessage {
+    JoinSuccess(String, i64),
+    JoinFail(String),
+    DataSuccess(String, i64),
+    DataFail(String),
+}
+
+struct InternalMetrics {
+    join_success_counter: CounterVec,
+    join_fail_counter: CounterVec,
+    data_success_counter: CounterVec,
+    data_fail_counter: CounterVec,
+    join_latency: HistogramVec,
+    data_latency: HistogramVec,
 }
 
 impl Metrics {
-    pub fn run(oui: &str) -> Sender {
-        let (tx, mut rx) = mpsc::channel(1024);
-        let metrics = Metrics {
-            oui: oui.to_string(),
-            join_success_counter: register_counter!(opts!(
+    pub fn init() -> Metrics {
+        let (sender, mut rx) = mpsc::channel(1024);
+
+        let metrics = InternalMetrics {
+            join_success_counter: register_counter_vec!(
                 "join_success",
                 "join success counter",
-                labels! {"oui" => oui}
-            ))
+                &["oui"]
+            )
             .unwrap(),
-            join_fail_counter: register_counter!(opts!(
-                "join_fail",
-                "join fail counter",
-                labels! {"oui" => oui}
-            ))
-            .unwrap(),
-            data_success_counter: register_counter!(opts!(
+            join_fail_counter: register_counter_vec!("join_fail", "join fail counter", &["oui"])
+                .unwrap(),
+            data_success_counter: register_counter_vec!(
                 "data_success",
                 "data success counter",
-                labels! {"oui" => oui}
-            ))
+                &["oui"]
+            )
             .unwrap(),
-            data_fail_counter: register_counter!(opts!(
-                "data_fail",
-                "data fail counter",
-                labels! {"oui" => oui}
-            ))
-            .unwrap(),
+            data_fail_counter: register_counter_vec!("data_fail", "data fail counter", &["oui"])
+                .unwrap(),
             join_latency: register_histogram_vec!(
                 "join_latency",
                 "join latency histogram",
@@ -73,31 +77,75 @@ impl Metrics {
         tokio::spawn(async move {
             loop {
                 match rx.recv().await {
-                    Some(Message::JoinSuccess(time_remaining)) => {
-                        let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
+                    Some(InternalMessage::JoinSuccess(label, t)) => {
+                        let in_secs = (t as f64) / 1000000.0;
                         metrics
                             .join_latency
-                            .with_label_values(&["1"])
-                            .observe(time_remaining_seconds);
-                        metrics.join_success_counter.inc();
+                            .with_label_values(&[&label])
+                            .observe(in_secs);
+                        metrics
+                            .join_success_counter
+                            .with_label_values(&[&label])
+                            .inc();
                     }
-                    Some(Message::JoinFail) => metrics.join_fail_counter.inc(),
+                    Some(InternalMessage::JoinFail(label)) => {
+                        metrics.join_fail_counter.with_label_values(&[&label]).inc()
+                    }
 
-                    Some(Message::DataSuccess(time_remaining)) => {
-                        let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
+                    Some(InternalMessage::DataSuccess(label, t)) => {
+                        let in_secs = (t as f64) / 1000000.0;
                         metrics
                             .data_latency
-                            .with_label_values(&["1"])
-                            .observe(time_remaining_seconds);
-                        metrics.data_success_counter.inc();
+                            .with_label_values(&[&label])
+                            .observe(in_secs);
+                        metrics
+                            .data_success_counter
+                            .with_label_values(&[&label])
+                            .inc();
                     }
-                    Some(Message::DataFail) => metrics.data_fail_counter.inc(),
+                    Some(InternalMessage::DataFail(label)) => {
+                        metrics.data_fail_counter.with_label_values(&[&label]).inc()
+                    }
+                    None => warn!("Metrics receive channel returned None. Is closed?"),
+                }
+            }
+        });
+        Metrics { sender }
+    }
+
+    pub fn run(&self, oui: &str) -> Sender {
+        let sender = self.sender.clone();
+        let (tx, mut rx) = mpsc::channel(1024);
+        let oui = oui.to_string();
+        tokio::spawn(async move {
+            loop {
+                let oui = oui.clone();
+                match rx.recv().await {
+                    Some(Message::JoinSuccess(t)) => {
+                        sender
+                            .send(InternalMessage::JoinSuccess(oui, t))
+                            .await
+                            .unwrap();
+                    }
+                    Some(Message::JoinFail) => {
+                        sender.send(InternalMessage::JoinFail(oui)).await.unwrap();
+                    }
+                    Some(Message::DataSuccess(t)) => {
+                        sender
+                            .send(InternalMessage::DataSuccess(oui, t))
+                            .await
+                            .unwrap();
+                    }
+                    Some(Message::DataFail) => {
+                        sender.send(InternalMessage::DataFail(oui)).await.unwrap();
+                    }
                     None => warn!("Metrics receive channel returned None. Is closed?"),
                 }
             }
         });
         tx
     }
+
     pub async fn serve_req(_req: Request<Body>) -> Result<Response<Body>> {
         let encoder = TextEncoder::new();
 
