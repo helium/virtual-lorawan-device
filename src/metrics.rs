@@ -1,5 +1,9 @@
+use super::*;
+use hyper::{header::CONTENT_TYPE, Body, Request, Response};
+use log::debug;
 use prometheus::{labels, opts, register_counter, register_histogram_vec};
 use prometheus::{Counter, HistogramVec};
+use prometheus::{Encoder, TextEncoder};
 
 pub struct Metrics {
     pub oui: String,
@@ -54,5 +58,25 @@ impl Metrics {
             )
             .unwrap(),
         }
+    }
+    pub async fn serve_req(_req: Request<Body>) -> Result<Response<Body>> {
+        let encoder = TextEncoder::new();
+
+        let metric_families = prometheus::gather();
+        let mut buffer = vec![];
+        let mut buffer_print = vec![];
+        encoder.encode(&metric_families, &mut buffer).unwrap();
+        encoder.encode(&metric_families, &mut buffer_print).unwrap();
+
+        // Output current stats
+        debug!("{}", String::from_utf8(buffer_print).unwrap());
+
+        let response = Response::builder()
+            .status(200)
+            .header(CONTENT_TYPE, encoder.format_type())
+            .body(Body::from(buffer))
+            .unwrap();
+
+        Ok(response)
     }
 }
