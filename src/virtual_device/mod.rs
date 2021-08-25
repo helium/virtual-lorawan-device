@@ -5,13 +5,13 @@ use lorawan_device::{radio, region, Device, Event as LorawanEvent, Response as L
 use lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto;
 use udp_radio::UdpRadio;
 pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
-
 mod udp_radio;
 
 pub struct VirtualDevice<'a> {
     device: Device<UdpRadio<'a>, LorawanCrypto>,
     receiver: Receiver<IntermediateEvent>,
     sender: Sender<IntermediateEvent>,
+    metrics_sender: metrics::Sender,
 }
 
 impl<'a> VirtualDevice<'a> {
@@ -20,6 +20,7 @@ impl<'a> VirtualDevice<'a> {
         host: SocketAddr,
         mac_address: [u8; 8],
         credentials: Credentials,
+        metrics_sender: metrics::Sender,
     ) -> Result<VirtualDevice<'a>> {
         let (radio, receiver, sender) = UdpRadio::new(instant, mac_address, host).await;
         let device: Device<udp_radio::UdpRadio, LorawanCrypto> = Device::new(
@@ -35,6 +36,7 @@ impl<'a> VirtualDevice<'a> {
             device,
             receiver,
             sender,
+            metrics_sender,
         })
     }
 
@@ -47,6 +49,7 @@ impl<'a> VirtualDevice<'a> {
 
         let mut time_remaining = None;
         let mut lorawan = self.device;
+        let metrics_sender = self.metrics_sender;
         loop {
             let event = self
                 .receiver
@@ -95,19 +98,16 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
-
                             if let Some(time_remaining) = time_remaining.take() {
-                                let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
-                                METRICS
-                                    .join_latency
-                                    .with_label_values(&["1"])
-                                    .observe(time_remaining_seconds);
+                                metrics_sender
+                                    .send(metrics::Message::JoinSuccess(time_remaining))
+                                    .await
+                                    .map_err(|_| Error::MetricsChannel)?;
                                 info!(
-                                    "Join success, time remaining: {:.3}s",
-                                    time_remaining_seconds
+                                    "Join success, time remaining: {:4} ms",
+                                    time_remaining / 1000
                                 );
                             }
-                            METRICS.join_success_counter.inc();
                         }
                         LorawanResponse::ReadyToSend => {
                             send_uplink = true;
@@ -116,27 +116,31 @@ impl<'a> VirtualDevice<'a> {
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
                             if let Some(time_remaining) = time_remaining.take() {
-                                let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
-                                METRICS
-                                    .data_latency
-                                    .with_label_values(&["1"])
-                                    .observe(time_remaining_seconds);
+                                metrics_sender
+                                    .send(metrics::Message::DataSuccess(time_remaining))
+                                    .await
+                                    .map_err(|_| Error::MetricsChannel)?;
                                 info!(
-                                "Downlink received with FCnt = {}, time remaining: {:.3}s",
-                                fcnt_down,
-                                time_remaining_seconds
-                            )
+                                    "Downlink received with FCnt = {}, time remaining: {:4} ms",
+                                    fcnt_down,
+                                    time_remaining / 1000
+                                )
                             }
-                            METRICS.data_success_counter.inc();
                         }
                         LorawanResponse::NoAck => {
+                            metrics_sender
+                                .send(metrics::Message::DataFail)
+                                .await
+                                .map_err(|_| Error::MetricsChannel)?;
                             send_uplink = true;
-                            METRICS.data_fail_counter.inc();
                             warn!("RxWindow expired, expected ACK to confirmed uplink not received")
                         }
                         LorawanResponse::NoJoinAccept => {
+                            metrics_sender
+                                .send(metrics::Message::JoinFail)
+                                .await
+                                .map_err(|_| Error::MetricsChannel)?;
                             self.sender.send(IntermediateEvent::NewSession).await?;
-                            METRICS.join_fail_counter.inc();
                             warn!("No Join Accept Received")
                         }
                         LorawanResponse::SessionExpired => {

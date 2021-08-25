@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 use metrics::Metrics;
 use std::{net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
@@ -24,10 +23,6 @@ pub struct Opt {
     pub settings: PathBuf,
 }
 
-lazy_static! {
-    static ref METRICS: Metrics = Metrics::new("1");
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // Default log level to INFO unless environment override
@@ -39,24 +34,9 @@ async fn main() -> Result<()> {
     let settings = settings::Settings::new(&cli.settings)?;
     let host = SocketAddr::from_str(settings.host.as_str())?;
 
-    for (label, device) in settings.devices {
-        let lorawan_app = virtual_device::VirtualDevice::new(
-            instant,
-            host,
-            device.mac_cloned_into_buf()?,
-            device.credentials,
-        )
-        .await?;
-
-        tokio::spawn(async move {
-            if let Err(e) = lorawan_app.run().await {
-                error!("{} device threw error: {:?}", label, e)
-            }
-        });
-    }
-
     // Start Prom Metrics Endpoint
     let addr = ([127, 0, 0, 1], 9898).into();
+    let metrics_sender = Metrics::run("1");
     println!("Listening on http://{}", addr);
 
     let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
@@ -68,6 +48,23 @@ async fn main() -> Result<()> {
             error!("prometheus serv threw error: {:?}", e)
         }
     });
+
+    for (label, device) in settings.devices {
+        let lorawan_app = virtual_device::VirtualDevice::new(
+            instant,
+            host,
+            device.mac_cloned_into_buf()?,
+            device.credentials,
+            metrics_sender.clone(),
+        )
+        .await?;
+
+        tokio::spawn(async move {
+            if let Err(e) = lorawan_app.run().await {
+                error!("{} device threw error: {:?}", label, e)
+            }
+        });
+    }
 
     tokio::signal::ctrl_c().await?;
     info!("User exit via ctrl C");

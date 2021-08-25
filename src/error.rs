@@ -15,4 +15,6 @@ pub enum Error {
     InvalidHex(#[from] hex::FromHexError),
     #[error("io error")]
     IoError(#[from] std::io::Error),
+    #[error("metrics channel error")]
+    MetricsChannel,
 }

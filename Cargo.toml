@@ -21,7 +21,6 @@ config = {version="0", default-features=false, features=["toml"]}
 rand = "0"
 prometheus = "0"
 hyper = { version = "0", features = ["full"] }
-lazy_static = "1"
 
 [dependencies.tokio]
 version = "1"
