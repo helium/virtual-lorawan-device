@@ -66,7 +66,10 @@ impl<'a> VirtualDevice<'a> {
                         }
                     }
                     IntermediateEvent::SendPacket(data, fport, confirmed) => {
-                        info!("Sending packet on fport {}", fport);
+                        // this will only be None if there is no session
+                        if let Some(fcnt_up) = lorawan.get_fcnt_up() {
+                            info!("Sending packet fcnt = {} on fport {}", fcnt_up, fport);
+                        }
                         lorawan.send(&data, fport, confirmed)
                     }
                     IntermediateEvent::UdpRx(frame, time_received) => {
@@ -100,7 +103,7 @@ impl<'a> VirtualDevice<'a> {
                                     .with_label_values(&["1"])
                                     .observe(time_remaining_seconds);
                                 info!(
-                                    "Join success, time remaining in seconds: {}",
+                                    "Join success, time remaining: {:.3}s",
                                     time_remaining_seconds
                                 );
                             }
@@ -119,7 +122,7 @@ impl<'a> VirtualDevice<'a> {
                                     .with_label_values(&["1"])
                                     .observe(time_remaining_seconds);
                                 info!(
-                                "Downlink received with FCnt = {}, time remaining in seconds: {}",
+                                "Downlink received with FCnt = {}, time remaining: {:.3}s",
                                 fcnt_down,
                                 time_remaining_seconds
                             )
