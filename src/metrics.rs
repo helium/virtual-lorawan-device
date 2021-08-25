@@ -1,9 +1,19 @@
 use super::*;
 use hyper::{header::CONTENT_TYPE, Body, Request, Response};
-use log::debug;
+use log::{debug, warn};
 use prometheus::{labels, opts, register_counter, register_histogram_vec};
 use prometheus::{Counter, HistogramVec};
 use prometheus::{Encoder, TextEncoder};
+use tokio::sync::mpsc;
+
+pub type Sender = mpsc::Sender<Message>;
+
+pub enum Message {
+    JoinSuccess(i64),
+    JoinFail,
+    DataSuccess(i64),
+    DataFail,
+}
 
 pub struct Metrics {
     pub oui: String,
@@ -16,8 +26,9 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(oui: &str) -> Metrics {
-        Metrics {
+    pub fn run(oui: &str) -> Sender {
+        let (tx, mut rx) = mpsc::channel(1024);
+        let metrics = Metrics {
             oui: oui.to_string(),
             join_success_counter: register_counter!(opts!(
                 "join_success",
@@ -57,7 +68,35 @@ impl Metrics {
                 vec![0.01, 0.05, 0.1, 0.20, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
             )
             .unwrap(),
-        }
+        };
+
+        tokio::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Some(Message::JoinSuccess(time_remaining)) => {
+                        let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
+                        metrics
+                            .join_latency
+                            .with_label_values(&["1"])
+                            .observe(time_remaining_seconds);
+                        metrics.join_success_counter.inc();
+                    }
+                    Some(Message::JoinFail) => metrics.join_fail_counter.inc(),
+
+                    Some(Message::DataSuccess(time_remaining)) => {
+                        let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
+                        metrics
+                            .data_latency
+                            .with_label_values(&["1"])
+                            .observe(time_remaining_seconds);
+                        metrics.data_success_counter.inc();
+                    }
+                    Some(Message::DataFail) => metrics.data_fail_counter.inc(),
+                    None => warn!("Metrics receive channel returned None. Is closed?"),
+                }
+            }
+        });
+        tx
     }
     pub async fn serve_req(_req: Request<Body>) -> Result<Response<Body>> {
         let encoder = TextEncoder::new();
