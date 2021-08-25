@@ -72,7 +72,7 @@ impl<'a> VirtualDevice<'a> {
                     IntermediateEvent::UdpRx(frame, time_received) => {
                         time_remaining = match frame.data.txpk.tmst {
                             semtech_udp::StringOrNum::N(tmst) => {
-                                Some(tmst as i64 - time_received as i64)
+                                Some(tmst as i64 - (time_received * 1000) as i64)
                             }
                             semtech_udp::StringOrNum::S(_) => None,
                         };
@@ -93,16 +93,15 @@ impl<'a> VirtualDevice<'a> {
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
 
-                            if let Some(time_elapsed) = time_remaining.take() {
-                                let in_seconds = ((time_elapsed - 5000) as f64) / 1000.0;
+                            if let Some(time_remaining) = time_remaining.take() {
+                                let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
                                 METRICS
                                     .join_latency
                                     .with_label_values(&["1"])
-                                    .observe(in_seconds);
+                                    .observe(time_remaining_seconds);
                                 info!(
-                                    "Join success, time_remaining: {}, seconds: {}",
-                                    time_elapsed - 5000,
-                                    in_seconds
+                                    "Join success, time remaining in seconds: {}",
+                                    time_remaining_seconds
                                 );
                             }
                             METRICS.join_success_counter.inc();
@@ -113,17 +112,16 @@ impl<'a> VirtualDevice<'a> {
                         }
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
-                            if let Some(time_elapsed) = time_remaining.take() {
-                                let in_seconds = ((time_elapsed - 5000) as f64) / 1000.0;
+                            if let Some(time_remaining) = time_remaining.take() {
+                                let time_remaining_seconds = (time_remaining as f64) / 1000000.0;
                                 METRICS
                                     .data_latency
                                     .with_label_values(&["1"])
-                                    .observe(in_seconds);
+                                    .observe(time_remaining_seconds);
                                 info!(
-                                "Downlink received with FCnt = {}, time_elapsed: {}, seconds: {}",
+                                "Downlink received with FCnt = {}, time remaining in seconds: {}",
                                 fcnt_down,
-                                time_elapsed - 1000,
-                                in_seconds
+                                time_remaining_seconds
                             )
                             }
                             METRICS.data_success_counter.inc();
