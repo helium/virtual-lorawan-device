@@ -121,17 +121,22 @@ impl<'a> UdpRadio<'a> {
     pub async fn timer(&mut self, future_time: u32) {
         let timeout_id = rand::random::<usize>();
         self.timeout_id = timeout_id;
-        let delay = future_time - self.time.elapsed().as_millis() as u32;
-        let sender = self.lorawan_sender.clone();
 
-        tokio::spawn(async move {
-            sleep(Duration::from_millis(delay as u64)).await;
-            sender
-                .send(IntermediateEvent::Timeout(timeout_id))
-                .await
-                .unwrap()
-        });
-        self.window_start = delay;
+        let elapsed = self.time.elapsed().as_millis() as u32;
+        // only kick out the packet if its on time
+        if future_time > elapsed {
+            let delay = future_time - elapsed;
+            let sender = self.lorawan_sender.clone();
+
+            tokio::spawn(async move {
+                sleep(Duration::from_millis(delay as u64)).await;
+                sender
+                    .send(IntermediateEvent::Timeout(timeout_id))
+                    .await
+                    .unwrap()
+            });
+            self.window_start = delay;
+        }
     }
 
     pub fn most_recent_timeout(&mut self, timeout_id: usize) -> bool {
