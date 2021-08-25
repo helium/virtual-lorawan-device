@@ -6,6 +6,8 @@ use std::{collections::HashMap, path::Path};
 #[derive(Deserialize, Debug)]
 pub struct Settings {
     pub host: String,
+    pub ouis: Vec<String>,
+    pub default_oui: String,
     pub devices: HashMap<String, Device>,
 }
 
@@ -30,6 +32,7 @@ impl Settings {
 pub struct Device {
     mac: String,
     pub credentials: Credentials,
+    pub oui: Option<String>
 }
 
 impl Device {
