@@ -1,6 +1,10 @@
 use super::*;
 use error::{Error, Result};
-use hyper::{header::CONTENT_TYPE, Body, Request, Response};
+use hyper::{
+    header::CONTENT_TYPE,
+    service::{make_service_fn, service_fn},
+    Body, Request, Response, Server,
+};
 use log::{debug, warn};
 use prometheus::{register_counter_vec, register_histogram_vec};
 use prometheus::{CounterVec, HistogramVec};
@@ -55,7 +59,19 @@ struct InternalMetrics {
 }
 
 impl Metrics {
-    pub fn init() -> Metrics {
+    pub fn run(addr: std::net::SocketAddr) -> Metrics {
+        // Start Prom Metrics Endpoint
+        info!("Prometheus Server listening on http://{}", addr);
+        let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
+            Ok::<_, hyper::Error>(service_fn(Metrics::serve_req))
+        }));
+
+        tokio::spawn(async move {
+            if let Err(e) = serve_future.await {
+                error!("prometheus serv threw error: {:?}", e)
+            }
+        });
+
         let (sender, mut rx) = mpsc::channel(1024);
 
         let metrics = InternalMetrics {
@@ -130,7 +146,7 @@ impl Metrics {
         Metrics { sender }
     }
 
-    pub fn get_sender(&self, oui: &str) -> Sender {
+    pub fn get_oui_sender(&self, oui: &str) -> Sender {
         Sender {
             oui: oui.to_string(),
             sender: self.sender.clone(),
