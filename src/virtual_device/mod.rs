@@ -73,7 +73,10 @@ impl<'a> VirtualDevice<'a> {
                     IntermediateEvent::SendPacket(data, fport, confirmed) => {
                         // this will only be None if there is no session
                         if let Some(fcnt_up) = lorawan.get_fcnt_up() {
-                            info!("{:8} sending packet fcnt = {} on fport {}", self.label, fcnt_up, fport);
+                            info!(
+                                "{:8} sending packet fcnt = {} on fport {}",
+                                self.label, fcnt_up, fport
+                            );
                         }
                         lorawan.send(&data, fport, confirmed)
                     }
@@ -105,7 +108,8 @@ impl<'a> VirtualDevice<'a> {
                                     .send(metrics::Message::JoinSuccess(time_remaining))
                                     .await?;
                                 info!(
-                                    "{:8} join success, time remaining: {:4} ms", self.label,
+                                    "{:8} join success, time remaining: {:4} ms",
+                                    self.label,
                                     time_remaining / 1000
                                 );
                             }
