@@ -11,11 +11,6 @@ mod virtual_device;
 pub use error::{Error, Result};
 pub use settings::Credentials;
 
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Server,
-};
-
 #[derive(Debug, StructOpt)]
 #[structopt(name = "virtual-lorawan-device", about = "LoRaWAN test device utility")]
 pub struct Opt {
@@ -29,28 +24,14 @@ async fn main() -> Result<()> {
     env_logger::init_from_env(
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "INFO"),
     );
-    let metrics = metrics::Metrics::init();
-
     let cli = Opt::from_args();
     let instant = Instant::now();
     let settings = settings::Settings::new(&cli.settings)?;
     let host = SocketAddr::from_str(settings.host.as_str())?;
-    // Start Prom Metrics Endpoint
-    let addr = ([127, 0, 0, 1], 9898).into();
-    println!("Listening on http://{}", addr);
-
-    let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
-        Ok::<_, hyper::Error>(service_fn(Metrics::serve_req))
-    }));
-
-    tokio::spawn(async move {
-        if let Err(e) = serve_future.await {
-            error!("prometheus serv threw error: {:?}", e)
-        }
-    });
+    let metrics = Metrics::run(([127, 0, 0, 1], 9898).into());
 
     for (label, device) in settings.devices {
-        let metrics_sender = metrics.get_sender(if let Some(oui) = &device.oui {
+        let metrics_sender = metrics.get_oui_sender(if let Some(oui) = &device.oui {
             oui
         } else {
             &settings.default_oui
