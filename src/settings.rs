@@ -1,13 +1,16 @@
 use super::Result;
 use config::{Config, File};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::{collections::HashMap, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
-    pub default_host: String,
+    pub default_host: SocketAddr,
+    pub default_mac: String,
     pub default_oui: String,
-    pub devices: HashMap<String, Device>,
+    pub device: HashMap<String, Device>,
+    pub packet_forwarder: HashMap<String, PacketForwarder>,
 }
 
 impl Settings {
@@ -29,19 +32,9 @@ impl Settings {
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Device {
-    mac: String,
     pub credentials: Credentials,
     pub oui: Option<String>,
-    pub host: Option<String>,
-}
-
-impl Device {
-    pub fn mac_cloned_into_buf(&self) -> Result<[u8; 8]> {
-        let vec = hex::decode(&self.mac)?;
-        Ok([
-            vec[7], vec[6], vec[5], vec[4], vec[3], vec[2], vec[1], vec[0],
-        ])
-    }
+    pub packet_forwarder: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -72,4 +65,23 @@ impl Credentials {
             vec[10], vec[11], vec[12], vec[13], vec[14], vec[15],
         ])
     }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct PacketForwarder {
+    mac: String,
+    pub host: std::net::SocketAddr,
+}
+
+impl PacketForwarder {
+    pub fn mac_cloned_into_buf(&self) -> Result<[u8; 8]> {
+        mac_string_into_buf(&self.mac)
+    }
+}
+
+pub fn mac_string_into_buf(s: &str) -> Result<[u8; 8]> {
+    let vec = hex::decode(s)?;
+    Ok([
+        vec[7], vec[6], vec[5], vec[4], vec[3], vec[2], vec[1], vec[0],
+    ])
 }

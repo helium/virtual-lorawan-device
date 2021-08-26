@@ -1,8 +1,8 @@
 #![macro_use]
-use crate::{info, warn, SocketAddr};
+use crate::warn;
 
 use lorawan_device::{radio, Timings};
-use semtech_udp::client_runtime::{self, UdpRuntime};
+use semtech_udp::client_runtime;
 use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor, StringOrNum};
 use std::{
     marker::PhantomData,
@@ -26,7 +26,6 @@ pub enum Response {}
 
 #[derive(Debug)]
 pub struct UdpRadio<'a> {
-    mac: [u8; 8],
     udp_sender: Sender<client_runtime::TxMessage>,
     lorawan_sender: Sender<IntermediateEvent>,
     rx_buffer: Buffer,
@@ -40,24 +39,15 @@ pub struct UdpRadio<'a> {
 impl<'a> UdpRadio<'a> {
     pub async fn new(
         time: Instant,
-        mac: [u8; 8],
-        host: SocketAddr,
+        udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
     ) -> (
         UdpRadio<'a>,
         tokio::sync::mpsc::Receiver<IntermediateEvent>,
         tokio::sync::mpsc::Sender<IntermediateEvent>,
     ) {
-        let outbound = SocketAddr::from(([0, 0, 0, 0], 0));
-        info!(
-            "Connecting to server {} from {}",
-            host.to_string(),
-            outbound.to_string()
-        );
-        let udp_runtime = UdpRuntime::new(mac, outbound, host).await.unwrap();
+        let (mut udp_receiver, udp_sender) = (udp_runtime.subscribe(), udp_runtime.publish_to());
 
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
-
-        let (mut udp_receiver, udp_sender) = (udp_runtime.subscribe(), udp_runtime.publish_to());
         let udp_lorawan_sender = lorawan_sender.clone();
 
         // this task receives downlinks and sends them to the lorawan layer as if a PHY radio
@@ -97,16 +87,11 @@ impl<'a> UdpRadio<'a> {
             }
         });
 
-        tokio::spawn(async move {
-            udp_runtime.run().await.unwrap();
-        });
-
         (
             UdpRadio {
                 rx_buffer: Buffer::default(),
                 time,
                 settings: Settings::default(),
-                mac,
                 udp_sender,
                 timeout_id: 0,
                 phantom: PhantomData::default(),
@@ -234,7 +219,8 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
             radio::Event::PhyEvent(packet) => {
                 self.rx_buffer.clear();
                 self.rx_buffer.extend(packet.data.txpk.data.as_slice());
-                let ack = packet.into_ack_for_gateway(semtech_udp::MacAddress::new(&self.mac));
+                let ack = packet
+                    .into_ack_for_gateway(semtech_udp::MacAddress::new(&[0, 0, 0, 0, 0, 0, 0, 0]));
                 let sender = self.udp_sender.clone();
                 // we are not in an async context so we must spawn this off
                 tokio::task::spawn(async move { sender.send(ack.into()).await });

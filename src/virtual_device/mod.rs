@@ -17,12 +17,11 @@ pub struct VirtualDevice<'a> {
 impl<'a> VirtualDevice<'a> {
     pub async fn new(
         instant: Instant,
-        host: SocketAddr,
-        mac_address: [u8; 8],
+        udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
         credentials: Credentials,
         metrics_sender: metrics::Sender,
     ) -> Result<VirtualDevice<'a>> {
-        let (radio, receiver, sender) = UdpRadio::new(instant, mac_address, host).await;
+        let (radio, receiver, sender) = UdpRadio::new(instant, udp_runtime).await;
         let device: Device<udp_radio::UdpRadio, LorawanCrypto> = Device::new(
             region::US915::subband(2).into(),
             radio,
