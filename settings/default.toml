@@ -1,2 +1,3 @@
 default_host = "127.0.0.1:1680"
+default_mac = "0807060504030201"
 default_oui = "1"

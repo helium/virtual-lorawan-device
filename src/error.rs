@@ -17,4 +17,6 @@ pub enum Error {
     IoError(#[from] std::io::Error),
     #[error("metrics channel error")]
     MetricsChannel,
+    #[error("semtech_udp client_runtime error")]
+    SemtechUdpClientRuntime(#[from] semtech_udp::client_runtime::Error),
 }
