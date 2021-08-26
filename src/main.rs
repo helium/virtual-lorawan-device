@@ -1,6 +1,6 @@
 use log::{debug, error, info, warn};
 use metrics::Metrics;
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr, time::Instant};
 use structopt::StructOpt;
 
 mod error;
@@ -37,11 +37,6 @@ async fn main() -> Result<()> {
     let host = SocketAddr::from_str(settings.host.as_str())?;
     // Start Prom Metrics Endpoint
     let addr = ([127, 0, 0, 1], 9898).into();
-    let mut metrics_sender: HashMap<String, metrics::Sender> = HashMap::new();
-    for oui in settings.ouis {
-        let sender = metrics.run(&oui);
-        metrics_sender.insert(oui, sender);
-    }
     println!("Listening on http://{}", addr);
 
     let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
@@ -55,16 +50,11 @@ async fn main() -> Result<()> {
     });
 
     for (label, device) in settings.devices {
-        let oui = if let Some(oui) = &device.oui {
+        let metrics_sender = metrics.get_sender(if let Some(oui) = &device.oui {
             oui
         } else {
             &settings.default_oui
-        };
-        let metrics_sender = if let Some(sender) = metrics_sender.get(oui) {
-            sender.clone()
-        } else {
-            panic!("Device is set for invalid OUI: {}", oui);
-        };
+        });
 
         let lorawan_app = virtual_device::VirtualDevice::new(
             instant,
