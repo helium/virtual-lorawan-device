@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
         });
 
         let lorawan_app = virtual_device::VirtualDevice::new(
+            label.clone(),
             instant,
             if let Some(pf) = pf_map.get(packet_forwarder) {
                 pf

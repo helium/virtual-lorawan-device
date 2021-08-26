@@ -8,6 +8,7 @@ pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
 mod udp_radio;
 
 pub struct VirtualDevice<'a> {
+    label: String,
     device: Device<UdpRadio<'a>, LorawanCrypto>,
     receiver: Receiver<IntermediateEvent>,
     sender: Sender<IntermediateEvent>,
@@ -16,6 +17,7 @@ pub struct VirtualDevice<'a> {
 
 impl<'a> VirtualDevice<'a> {
     pub async fn new(
+        label: String,
         instant: Instant,
         udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
         credentials: Credentials,
@@ -32,6 +34,7 @@ impl<'a> VirtualDevice<'a> {
         );
 
         Ok(VirtualDevice {
+            label,
             device,
             receiver,
             sender,
@@ -70,7 +73,7 @@ impl<'a> VirtualDevice<'a> {
                     IntermediateEvent::SendPacket(data, fport, confirmed) => {
                         // this will only be None if there is no session
                         if let Some(fcnt_up) = lorawan.get_fcnt_up() {
-                            info!("Sending packet fcnt = {} on fport {}", fcnt_up, fport);
+                            info!("{:8} sending packet fcnt = {} on fport {}", self.label, fcnt_up, fport);
                         }
                         lorawan.send(&data, fport, confirmed)
                     }
@@ -93,7 +96,7 @@ impl<'a> VirtualDevice<'a> {
                     Ok(response) => match response {
                         LorawanResponse::TimeoutRequest(ms) => {
                             lorawan.get_radio().timer(ms).await;
-                            debug!("TimeoutRequest: {:?}", ms)
+                            debug!("{:8} TimeoutRequest: {:?}", self.label, ms)
                         }
                         LorawanResponse::JoinSuccess => {
                             send_uplink = true;
@@ -102,14 +105,14 @@ impl<'a> VirtualDevice<'a> {
                                     .send(metrics::Message::JoinSuccess(time_remaining))
                                     .await?;
                                 info!(
-                                    "Join success, time remaining: {:4} ms",
+                                    "{:8} join success, time remaining: {:4} ms", self.label,
                                     time_remaining / 1000
                                 );
                             }
                         }
                         LorawanResponse::ReadyToSend => {
                             send_uplink = true;
-                            debug!("Ready to send")
+                            debug!("{:8} ready to send", self.label)
                         }
                         LorawanResponse::DownlinkReceived(fcnt_down) => {
                             send_uplink = true;
@@ -118,7 +121,8 @@ impl<'a> VirtualDevice<'a> {
                                     .send(metrics::Message::DataSuccess(time_remaining))
                                     .await?;
                                 info!(
-                                    "Downlink received with FCnt = {}, time remaining: {:4} ms",
+                                    "{:8} downlink received with fcnt = {}, time remaining: {:4} ms",
+                                    self.label,
                                     fcnt_down,
                                     time_remaining / 1000
                                 )
@@ -127,28 +131,29 @@ impl<'a> VirtualDevice<'a> {
                         LorawanResponse::NoAck => {
                             metrics_sender.send(metrics::Message::DataFail).await?;
                             send_uplink = true;
-                            warn!("RxWindow expired, expected ACK to confirmed uplink not received")
+                            warn!("{:8} RxWindow expired, expected ACK to confirmed uplink not received", self.label)
                         }
                         LorawanResponse::NoJoinAccept => {
                             metrics_sender.send(metrics::Message::JoinFail).await?;
                             self.sender.send(IntermediateEvent::NewSession).await?;
-                            warn!("No Join Accept Received")
+                            warn!("{:8} No Join Accept Received", self.label)
                         }
                         LorawanResponse::SessionExpired => {
                             self.sender.send(IntermediateEvent::NewSession).await?;
-                            debug!("SessionExpired. Created new Session")
+                            debug!("{:8} SessionExpired. Created new Session", self.label)
                         }
                         LorawanResponse::NoUpdate => {
-                            debug!("NoUpdate")
+                            debug!("{:8} NoUpdate", self.label)
                         }
                         LorawanResponse::UplinkSending(fcnt_up) => {
-                            info!("Uplink with FCnt {}", fcnt_up)
+                            info!("{:8} Uplink with FCnt {}", self.label, fcnt_up)
                         }
                         LorawanResponse::JoinRequestSending => {
-                            info!("Join Request Sending")
+                            info!("{:8} Join Request Sending", self.label)
                         }
                     },
-                    Err(err) => error!("Error {:?}", err),
+                    // silent errors since we receive radio frames for other devices
+                    Err(_err) => (),
                 }
                 send_uplink
             };
