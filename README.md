@@ -13,14 +13,26 @@ may be overriden with the `--config` option.
 For example:
 ```toml
 # optionally override host
-host = "127.0.0.1:1691"
+default_host = "127.0.0.1:1691"
+# optionally override default oui
+default_oui = "2"
 
 [devices.one]
 # each device is a GWMP Client with MAC 1:1
 mac = "0807060504030201"
+# optionally set a different host for this device
+host = "127.0.0.1:1692"
 [devices.one.credentials]
-mac_id = "3ED43BEF1857EE4B"
 dev_eui = "3ED43BEF1857EE4B"
 app_eui = "35BEED137ACD344B"
 app_key = "275AD3615ACB47A381E6B79A832CC5AE"
+
+[devices.two]
+mac = "0807060504030202"
+# optionally set oui as "1" for this specific device
+oui = "1" 
+[devices.two.credentials]
+dev_eui = "AD8A250220D8D29A"
+app_eui = "35BEED137ACD344B"
+app_key = "D47593BDC17BEFB37E7EDD1AD6FFDF88"
 ```
