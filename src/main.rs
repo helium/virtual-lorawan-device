@@ -30,8 +30,11 @@ async fn main() -> Result<()> {
     let metrics = Metrics::run(([127, 0, 0, 1], 9898).into());
 
     for (label, device) in settings.devices {
-        // all virtual devices connect to the same host
-        let host = SocketAddr::from_str(settings.host.as_str())?;
+        let host = SocketAddr::from_str(if let Some(oui) = &device.host {
+            oui
+        } else {
+            &settings.default_host
+        })?;
 
         let metrics_sender = metrics.get_oui_sender(if let Some(oui) = &device.oui {
             oui

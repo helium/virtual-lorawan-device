@@ -1,2 +1,2 @@
-host = "127.0.0.1:1680"
+default_host = "127.0.0.1:1680"
 default_oui = "1"
