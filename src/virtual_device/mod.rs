@@ -49,7 +49,7 @@ impl<'a> VirtualDevice<'a> {
 
         let mut time_remaining = None;
         let mut lorawan = self.device;
-        let metrics_sender = self.metrics_sender;
+        let mut metrics_sender = self.metrics_sender;
         loop {
             let event = self
                 .receiver
@@ -101,8 +101,7 @@ impl<'a> VirtualDevice<'a> {
                             if let Some(time_remaining) = time_remaining.take() {
                                 metrics_sender
                                     .send(metrics::Message::JoinSuccess(time_remaining))
-                                    .await
-                                    .map_err(|_| Error::MetricsChannel)?;
+                                    .await?;
                                 info!(
                                     "Join success, time remaining: {:4} ms",
                                     time_remaining / 1000
@@ -118,8 +117,7 @@ impl<'a> VirtualDevice<'a> {
                             if let Some(time_remaining) = time_remaining.take() {
                                 metrics_sender
                                     .send(metrics::Message::DataSuccess(time_remaining))
-                                    .await
-                                    .map_err(|_| Error::MetricsChannel)?;
+                                    .await?;
                                 info!(
                                     "Downlink received with FCnt = {}, time remaining: {:4} ms",
                                     fcnt_down,
@@ -128,18 +126,12 @@ impl<'a> VirtualDevice<'a> {
                             }
                         }
                         LorawanResponse::NoAck => {
-                            metrics_sender
-                                .send(metrics::Message::DataFail)
-                                .await
-                                .map_err(|_| Error::MetricsChannel)?;
+                            metrics_sender.send(metrics::Message::DataFail).await?;
                             send_uplink = true;
                             warn!("RxWindow expired, expected ACK to confirmed uplink not received")
                         }
                         LorawanResponse::NoJoinAccept => {
-                            metrics_sender
-                                .send(metrics::Message::JoinFail)
-                                .await
-                                .map_err(|_| Error::MetricsChannel)?;
+                            metrics_sender.send(metrics::Message::JoinFail).await?;
                             self.sender.send(IntermediateEvent::NewSession).await?;
                             warn!("No Join Accept Received")
                         }

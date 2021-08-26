@@ -1,4 +1,5 @@
 use super::*;
+use error::{Error, Result};
 use hyper::{header::CONTENT_TYPE, Body, Request, Response};
 use log::{debug, warn};
 use prometheus::{register_counter_vec, register_histogram_vec};
@@ -6,7 +7,23 @@ use prometheus::{CounterVec, HistogramVec};
 use prometheus::{Encoder, TextEncoder};
 use tokio::sync::mpsc;
 
-pub type Sender = mpsc::Sender<Message>;
+pub struct Sender {
+    oui: String,
+    sender: mpsc::Sender<InternalMessage>,
+}
+
+impl Sender {
+    pub async fn send(&mut self, message: Message) -> Result<()> {
+        let oui = self.oui.clone();
+        match message {
+            Message::JoinSuccess(t) => self.sender.send(InternalMessage::JoinSuccess(oui, t)).await,
+            Message::JoinFail => self.sender.send(InternalMessage::JoinFail(oui)).await,
+            Message::DataSuccess(t) => self.sender.send(InternalMessage::DataSuccess(oui, t)).await,
+            Message::DataFail => self.sender.send(InternalMessage::DataFail(oui)).await,
+        }
+        .map_err(|_| Error::MetricsChannel)
+    }
+}
 
 #[derive(Debug)]
 pub enum Message {
@@ -113,37 +130,11 @@ impl Metrics {
         Metrics { sender }
     }
 
-    pub fn run(&self, oui: &str) -> Sender {
-        let sender = self.sender.clone();
-        let (tx, mut rx) = mpsc::channel(1024);
-        let oui = oui.to_string();
-        tokio::spawn(async move {
-            loop {
-                let oui = oui.clone();
-                match rx.recv().await {
-                    Some(Message::JoinSuccess(t)) => {
-                        sender
-                            .send(InternalMessage::JoinSuccess(oui, t))
-                            .await
-                            .unwrap();
-                    }
-                    Some(Message::JoinFail) => {
-                        sender.send(InternalMessage::JoinFail(oui)).await.unwrap();
-                    }
-                    Some(Message::DataSuccess(t)) => {
-                        sender
-                            .send(InternalMessage::DataSuccess(oui, t))
-                            .await
-                            .unwrap();
-                    }
-                    Some(Message::DataFail) => {
-                        sender.send(InternalMessage::DataFail(oui)).await.unwrap();
-                    }
-                    None => warn!("Metrics receive channel returned None. Is closed?"),
-                }
-            }
-        });
-        tx
+    pub fn get_sender(&self, oui: &str) -> Sender {
+        Sender {
+            oui: oui.to_string(),
+            sender: self.sender.clone(),
+        }
     }
 
     pub async fn serve_req(_req: Request<Body>) -> Result<Response<Body>> {
