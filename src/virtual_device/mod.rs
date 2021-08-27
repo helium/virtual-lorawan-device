@@ -13,6 +13,7 @@ pub struct VirtualDevice<'a> {
     receiver: Receiver<IntermediateEvent>,
     sender: Sender<IntermediateEvent>,
     metrics_sender: metrics::Sender,
+    rejoin_frames: u32,
 }
 
 impl<'a> VirtualDevice<'a> {
@@ -22,6 +23,7 @@ impl<'a> VirtualDevice<'a> {
         udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
         credentials: Credentials,
         metrics_sender: metrics::Sender,
+        rejoin_frames: u32,
     ) -> Result<VirtualDevice<'a>> {
         let (radio, receiver, sender) = UdpRadio::new(instant, udp_runtime).await;
         let device: Device<udp_radio::UdpRadio, LorawanCrypto> = Device::new(
@@ -39,6 +41,7 @@ impl<'a> VirtualDevice<'a> {
             receiver,
             sender,
             metrics_sender,
+            rejoin_frames,
         })
     }
 
@@ -162,13 +165,28 @@ impl<'a> VirtualDevice<'a> {
                 send_uplink
             };
             if send_uplink {
-                let mut fport = rand::random();
-                while fport == 0 {
-                    fport = rand::random();
+                if let Some(fcnt_up) = lorawan.get_fcnt_up() {
+                    if fcnt_up > self.rejoin_frames {
+                        self.sender.send(IntermediateEvent::NewSession).await?;
+                    } else {
+                        let mut fport = rand::random();
+                        while fport == 0 {
+                            fport = rand::random();
+                        }
+                        self.sender
+                            .send(IntermediateEvent::SendPacket(
+                                vec![
+                                    rand::random(),
+                                    rand::random(),
+                                    rand::random(),
+                                    rand::random(),
+                                ],
+                                fport,
+                                true,
+                            ))
+                            .await?;
+                    }
                 }
-                self.sender
-                    .send(IntermediateEvent::SendPacket(vec![1, 2, 3, 4], fport, true))
-                    .await?;
             }
         }
     }
