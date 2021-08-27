@@ -33,8 +33,14 @@ impl Settings {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Device {
     pub credentials: Credentials,
+    #[serde(default = "default_rejoin_frames")]
+    pub rejoin_frames: u32,
     pub oui: Option<String>,
     pub packet_forwarder: Option<String>,
+}
+
+fn default_rejoin_frames() -> u32 {
+    0xFFFF
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
