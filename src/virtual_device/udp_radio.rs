@@ -65,7 +65,7 @@ impl<'a> UdpRadio<'a> {
                             if scheduled_time > &time {
                                 let delay = scheduled_time - time as u64;
                                 tokio::spawn(async move {
-                                    sleep(Duration::from_millis(delay + 50)).await;
+                                    sleep(Duration::from_micros(delay + 50_000)).await;
                                     udp_lorawan_sender
                                         .send(IntermediateEvent::UdpRx(pull_resp, time))
                                         .await
