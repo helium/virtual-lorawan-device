@@ -60,9 +60,9 @@ impl<'a> UdpRadio<'a> {
                     match &pull_resp.data.txpk.tmst {
                         // here we will hold the frame until the RxWindow begins
                         StringOrNum::N(n) => {
-                            let scheduled_time = n / 1000;
-                            let time = time.elapsed().as_millis() as u64;
-                            if scheduled_time > time {
+                            let scheduled_time = n;
+                            let time = time.elapsed().as_micros() as u64;
+                            if scheduled_time > &time {
                                 let delay = scheduled_time - time as u64;
                                 tokio::spawn(async move {
                                     sleep(Duration::from_millis(delay + 50)).await;

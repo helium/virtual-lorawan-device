@@ -86,7 +86,7 @@ impl<'a> VirtualDevice<'a> {
                     IntermediateEvent::UdpRx(frame, time_received) => {
                         time_remaining = match frame.data.txpk.tmst {
                             semtech_udp::StringOrNum::N(tmst) => {
-                                Some(tmst as i64 - (time_received * 1000) as i64)
+                                Some(tmst as i64 - time_received as i64)
                             }
                             semtech_udp::StringOrNum::S(_) => None,
                         };
