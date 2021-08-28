@@ -96,8 +96,8 @@ impl<'a> VirtualDevice<'a> {
                 }
             };
             lorawan = new_state;
-            let send_uplink = {
-                let mut send_uplink = false;
+            let (send_uplink, confirmed) = {
+                let (mut send_uplink, mut confirmed) = (false, true);
                 match response {
                     Ok(response) => match response {
                         LorawanResponse::TimeoutRequest(ms) => {
@@ -138,6 +138,7 @@ impl<'a> VirtualDevice<'a> {
                         LorawanResponse::NoAck => {
                             metrics_sender.send(metrics::Message::DataFail).await?;
                             send_uplink = true;
+                            confirmed = false;
                             warn!("{:8} RxWindow expired, expected ACK to confirmed uplink not received", self.label)
                         }
                         LorawanResponse::NoJoinAccept => {
@@ -162,7 +163,7 @@ impl<'a> VirtualDevice<'a> {
                     // silent errors since we receive radio frames for other devices
                     Err(_err) => (),
                 }
-                send_uplink
+                (send_uplink, confirmed)
             };
             if send_uplink {
                 if let Some(fcnt_up) = lorawan.get_fcnt_up() {
@@ -182,7 +183,7 @@ impl<'a> VirtualDevice<'a> {
                                     rand::random(),
                                 ],
                                 fport,
-                                true,
+                                confirmed,
                             ))
                             .await?;
                     }
