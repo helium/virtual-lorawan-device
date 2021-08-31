@@ -60,9 +60,9 @@ impl<'a> UdpRadio<'a> {
                     match &pull_resp.data.txpk.tmst {
                         // here we will hold the frame until the RxWindow begins
                         StringOrNum::N(n) => {
-                            let scheduled_time = n;
+                            let scheduled_time = *n as u64;
                             let time = time.elapsed().as_micros() as u64;
-                            if scheduled_time > &time {
+                            if scheduled_time > time {
                                 let delay = scheduled_time - time as u64;
                                 tokio::spawn(async move {
                                     sleep(Duration::from_micros(delay + 50_000)).await;
@@ -181,7 +181,7 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
         match event {
             radio::Event::TxRequest(tx_config, buffer) => {
                 let size = buffer.data.len() as u64;
-                let tmst = self.time.elapsed().as_micros() as u64;
+                let tmst = self.time.elapsed().as_micros() as u32;
 
                 let settings = Settings::from(tx_config);
                 let mut data = Vec::new();

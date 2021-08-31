@@ -13,7 +13,7 @@ hex = "0"
 log = "0"
 lorawan-encoding = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 lorawan-device = { git = "https://github.com/ivajloip/rust-lorawan.git" }
-semtech-udp = { version = ">=0.6.1,<1", features=["client"] }
+semtech-udp = { version = ">=0.7,<1", features=["client"] }
 serde = "1"
 structopt = "0"
 thiserror = "1"
