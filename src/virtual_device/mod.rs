@@ -110,11 +110,15 @@ impl<'a> VirtualDevice<'a> {
                                 metrics_sender
                                     .send(metrics::Message::JoinSuccess(time_remaining))
                                     .await?;
-                                info!(
-                                    "{:8} join success, time remaining: {:4} ms",
-                                    self.label,
-                                    time_remaining / 1000
-                                );
+
+                                if let Some(session) = lorawan.get_session_keys() {
+                                    info!(
+                                        "{:8} join success, time remaining: {:4} ms, {:?}",
+                                        self.label,
+                                        time_remaining / 1000,
+                                        session
+                                    )
+                                }
                             }
                         }
                         LorawanResponse::ReadyToSend => {
