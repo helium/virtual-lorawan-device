@@ -55,7 +55,6 @@ app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 [device.two]
 packet_forwarder = "pf_two"
 oui = "2"
-[devices.one.creden
 [devices.two.credentials]
 dev_eui = "3ED43BEF18D7EE4B"
 app_eui = "35BEED137ACD384B"
