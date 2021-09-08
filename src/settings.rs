@@ -1,13 +1,10 @@
 use super::Result;
 use config::{Config, File};
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use std::{collections::HashMap, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
-    pub default_host: SocketAddr,
-    pub default_mac: String,
     pub default_oui: String,
     pub device: HashMap<String, Device>,
     pub packet_forwarder: HashMap<String, PacketForwarder>,
