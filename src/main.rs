@@ -24,9 +24,18 @@ const DEFAULT_PF: &str = "default";
 #[tokio::main]
 async fn main() -> Result<()> {
     // Default log level to INFO unless environment override
-    env_logger::init_from_env(
+    let mut log_builder = env_logger::Builder::from_env(
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "INFO"),
     );
+
+    // Allow timestamps to be disabled
+    let timestamps = std::env::var("VDEVICE_LOG_TIMESTAMP").unwrap_or_else(|_| "true".to_string());
+    if timestamps != "true" {
+        log_builder.format_timestamp(None).init();
+    } else {
+        log_builder.init();
+    }
+
     let cli = Opt::from_args();
     let instant = Instant::now();
     let settings = settings::Settings::new(&cli.settings)?;
