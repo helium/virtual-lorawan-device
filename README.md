@@ -2,8 +2,6 @@
 
 # virtual-lorawan-device
 
-If you need the legacy project, please see [here](https://github.com/helium/virtual-lorawan-device/tree/legacy).
-
 ## Configuration
 
 You'll want to create a file called `settings.toml` and define one more devices. By default,
