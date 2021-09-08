@@ -60,21 +60,22 @@ impl<'a> UdpRadio<'a> {
                     match &pull_resp.data.txpk.tmst {
                         // here we will hold the frame until the RxWindow begins
                         StringOrNum::N(n) => {
-                            let scheduled_time = *n as u64;
-                            let time = time.elapsed().as_micros() as u64;
+                            let scheduled_time = *n;
+                            let time_elapsed = time.elapsed().as_micros();
+                            let time = time_elapsed as u32;
                             if scheduled_time > time {
-                                let delay = scheduled_time - time as u64;
+                                let delay = scheduled_time - time;
                                 tokio::spawn(async move {
-                                    sleep(Duration::from_micros(delay + 50_000)).await;
+                                    sleep(Duration::from_micros(delay as u64 + 50_000)).await;
                                     udp_lorawan_sender
-                                        .send(IntermediateEvent::UdpRx(pull_resp, time))
+                                        .send(IntermediateEvent::UdpRx(pull_resp, time as u64))
                                         .await
                                         .unwrap();
                                 });
                             } else {
                                 let time_since_scheduled_time = time - scheduled_time;
                                 warn!(
-                                    "UDP packet received after tx time by {} ms",
+                                    "UDP packet received after tx time by {} μs",
                                     time_since_scheduled_time
                                 );
                             }
@@ -182,7 +183,6 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
             radio::Event::TxRequest(tx_config, buffer) => {
                 let size = buffer.data.len() as u64;
                 let tmst = self.time.elapsed().as_micros() as u32;
-
                 let settings = Settings::from(tx_config);
                 let mut data = Vec::new();
                 data.extend_from_slice(buffer.data.as_ref());
