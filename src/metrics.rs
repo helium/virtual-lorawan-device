@@ -59,7 +59,7 @@ struct InternalMetrics {
 }
 
 impl Metrics {
-    pub fn run(addr: std::net::SocketAddr) -> Metrics {
+    pub fn run(addr: std::net::SocketAddr, ouis: Vec<&String>) -> Metrics {
         // Start Prom Metrics Endpoint
         info!("Prometheus Server listening on http://{}", addr);
         let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
@@ -106,6 +106,20 @@ impl Metrics {
             )
             .unwrap(),
         };
+
+        // initialize the counters with 0 so they show up in the HTTP scrape
+        for oui in ouis {
+            metrics
+                .join_success_counter
+                .with_label_values(&[oui])
+                .reset();
+            metrics.join_fail_counter.with_label_values(&[oui]).reset();
+            metrics
+                .data_success_counter
+                .with_label_values(&[oui])
+                .reset();
+            metrics.data_fail_counter.with_label_values(&[oui]).reset();
+        }
 
         tokio::spawn(async move {
             loop {

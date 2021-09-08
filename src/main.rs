@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     let cli = Opt::from_args();
     let instant = Instant::now();
     let settings = settings::Settings::new(&cli.settings)?;
-    let metrics = Metrics::run(([127, 0, 0, 1], 9898).into());
+    let metrics = Metrics::run(([127, 0, 0, 1], 9898).into(), settings.get_ouis());
 
     let pf_map = setup_packet_forwarders(
         settings.packet_forwarder,

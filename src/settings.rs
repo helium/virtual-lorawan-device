@@ -28,6 +28,18 @@ impl Settings {
         }
         c.try_into().map_err(|e| e.into())
     }
+
+    pub fn get_ouis(&self) -> Vec<&String> {
+        let mut ouis = Vec::new();
+        for device in self.device.values() {
+            if let Some(oui) = &device.oui {
+                if !ouis.contains(&oui) {
+                    ouis.push(oui);
+                }
+            }
+        }
+        ouis
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
