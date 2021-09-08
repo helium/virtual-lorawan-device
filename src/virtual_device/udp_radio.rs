@@ -206,7 +206,7 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
                 if let Err(e) = self.udp_sender.try_send(packet.into()) {
                     panic!("UdpTx Queue Overflow! {}", e)
                 }
-                
+
                 // units are in millis here because
                 // the lorawan device stack operates in millis
                 Ok(radio::Response::TxDone(
