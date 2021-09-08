@@ -60,21 +60,21 @@ impl<'a> UdpRadio<'a> {
                     match &pull_resp.data.txpk.tmst {
                         // here we will hold the frame until the RxWindow begins
                         StringOrNum::N(n) => {
-                            let scheduled_time = *n as u64;
-                            let time = time.elapsed().as_micros() as u64;
+                            let scheduled_time = *n;
+                            let time = time.elapsed().as_micros() as u32;
                             if scheduled_time > time {
-                                let delay = scheduled_time - time as u64;
+                                let delay = scheduled_time - time;
                                 tokio::spawn(async move {
-                                    sleep(Duration::from_micros(delay + 50_000)).await;
+                                    sleep(Duration::from_micros(delay as u64 + 50_000)).await;
                                     udp_lorawan_sender
-                                        .send(IntermediateEvent::UdpRx(pull_resp, time))
+                                        .send(IntermediateEvent::UdpRx(pull_resp, time as u64))
                                         .await
                                         .unwrap();
                                 });
                             } else {
                                 let time_since_scheduled_time = time - scheduled_time;
                                 warn!(
-                                    "UDP packet received after tx time by {} ms",
+                                    "UDP packet received after tx time by {} μs",
                                     time_since_scheduled_time
                                 );
                             }
@@ -106,7 +106,8 @@ impl<'a> UdpRadio<'a> {
     pub async fn timer(&mut self, future_time: u32) {
         let timeout_id = rand::random::<usize>();
         self.timeout_id = timeout_id;
-
+        // units are in millis here because
+        // the lorawan device stack operates in millis
         let elapsed = self.time.elapsed().as_millis() as u32;
         // only kick out the packet if its on time
         if future_time > elapsed {
@@ -182,7 +183,6 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
             radio::Event::TxRequest(tx_config, buffer) => {
                 let size = buffer.data.len() as u64;
                 let tmst = self.time.elapsed().as_micros() as u32;
-
                 let settings = Settings::from(tx_config);
                 let mut data = Vec::new();
                 data.extend_from_slice(buffer.data.as_ref());
@@ -207,6 +207,8 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
                     panic!("UdpTx Queue Overflow! {}", e)
                 }
 
+                // units are in millis here because
+                // the lorawan device stack operates in millis
                 Ok(radio::Response::TxDone(
                     self.time.elapsed().as_millis() as u32
                 ))
