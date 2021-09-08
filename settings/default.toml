@@ -1,5 +1,7 @@
-default_host = "127.0.0.1:1680"
-default_mac = "0807060504030201"
 default_oui = "1"
-
-[packet_forwarder]
+default_packet_forwarder = "default"
+# if any explicit packet forwarders are defined in settings.toml,
+# this packet forwarder is pruned from the map
+[packet_forwarder.default]
+host = "127.0.0.1:1680"
+mac = "0807060504030201"

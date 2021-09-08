@@ -23,8 +23,9 @@ may be overriden with the `--config` option.
 
 If you want to run one or more virtual devices, your `settings.toml` file may look like this:
 ```toml
-# optionally override host
-default_host = "127.0.0.1:1691"
+# Optionally override host IP
+#[packet_forwarder.default]
+#host = "127.0.0.1:1681"
 
 [devices.one.credentials]
 dev_eui = "3ED43BEF1857EF4B"
