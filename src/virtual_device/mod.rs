@@ -1,8 +1,9 @@
 use super::*;
 
 use lorawan_device::{radio, region, Device, Event as LorawanEvent, Response as LorawanResponse};
-
 use lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto;
+use semtech_udp::StringOrNum;
+use tokio::time::{sleep, Duration};
 use udp_radio::UdpRadio;
 pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
 mod udp_radio;
@@ -10,6 +11,7 @@ mod udp_radio;
 pub struct VirtualDevice<'a> {
     label: String,
     device: Device<UdpRadio<'a>, LorawanCrypto>,
+    time: Instant,
     receiver: Receiver<IntermediateEvent>,
     sender: Sender<IntermediateEvent>,
     metrics_sender: metrics::Sender,
@@ -19,13 +21,13 @@ pub struct VirtualDevice<'a> {
 impl<'a> VirtualDevice<'a> {
     pub async fn new(
         label: String,
-        instant: Instant,
+        time: Instant,
         udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
         credentials: Credentials,
         metrics_sender: metrics::Sender,
         rejoin_frames: u32,
     ) -> Result<VirtualDevice<'a>> {
-        let (radio, receiver, sender) = UdpRadio::new(instant, udp_runtime).await;
+        let (radio, receiver, sender) = UdpRadio::new(time, udp_runtime).await;
         let device: Device<udp_radio::UdpRadio, LorawanCrypto> = Device::new(
             region::US915::subband(2).into(),
             radio,
@@ -38,6 +40,7 @@ impl<'a> VirtualDevice<'a> {
         Ok(VirtualDevice {
             label,
             device,
+            time,
             receiver,
             sender,
             metrics_sender,
@@ -83,7 +86,39 @@ impl<'a> VirtualDevice<'a> {
                         }
                         lorawan.send(&data, fport, confirmed)
                     }
-                    IntermediateEvent::UdpRx(frame, time_received) => {
+                    // UdpRx processes the raw UDP frame and delays it if necessary
+                    IntermediateEvent::UdpRx(frame) => {
+                        let self_sender = self.sender.clone();
+                        match &frame.data.txpk.tmst {
+                            // we will hold the frame until the RxWindow begins
+                            StringOrNum::N(n) => {
+                                let scheduled_time = *n;
+                                let time = self.time.elapsed().as_micros() as u32;
+                                if scheduled_time > time {
+                                    let delay = scheduled_time - time;
+                                    tokio::spawn(async move {
+                                        sleep(Duration::from_micros(delay as u64 + 50_000)).await;
+                                        self_sender
+                                            .send(IntermediateEvent::RadioEvent(frame, time as u64))
+                                            .await
+                                            .unwrap();
+                                    });
+                                } else {
+                                    let time_since_scheduled_time = time - scheduled_time;
+                                    warn!(
+                                        "{:8} UDP packet received after tx time by {} μs",
+                                        self.label, time_since_scheduled_time
+                                    );
+                                }
+                            }
+                            StringOrNum::S(s) => {
+                                warn!("{:8} Unexpected! UDP packet sent with {:?}", self.label, s);
+                            }
+                        }
+                        (lorawan, Ok(LorawanResponse::NoUpdate))
+                    }
+                    // at this level, the RadioEvent is being delivered in the appopriate window
+                    IntermediateEvent::RadioEvent(frame, time_received) => {
                         time_remaining = match frame.data.txpk.tmst {
                             semtech_udp::StringOrNum::N(tmst) => {
                                 Some(tmst as i64 - time_received as i64)

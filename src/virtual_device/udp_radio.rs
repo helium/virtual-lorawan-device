@@ -1,9 +1,6 @@
-#![macro_use]
-use crate::warn;
-
 use lorawan_device::{radio, Timings};
 use semtech_udp::client_runtime;
-use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor, StringOrNum};
+use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor};
 use std::{
     marker::PhantomData,
     time::{Duration, Instant},
@@ -15,7 +12,8 @@ use tokio::time::sleep;
 // I need some intermediate event because of Lifetimes
 // maybe there's a cleaner way of doing this
 pub enum IntermediateEvent {
-    UdpRx(Box<semtech_udp::pull_resp::Packet>, u64),
+    UdpRx(Box<semtech_udp::pull_resp::Packet>),
+    RadioEvent(Box<semtech_udp::pull_resp::Packet>, u64),
     NewSession,
     Timeout(usize),
     SendPacket(Vec<u8>, u8, bool),
@@ -56,33 +54,10 @@ impl<'a> UdpRadio<'a> {
             loop {
                 let event = udp_receiver.recv().await.unwrap();
                 if let semtech_udp::Packet::Down(semtech_udp::Down::PullResp(pull_resp)) = event {
-                    let udp_lorawan_sender = udp_lorawan_sender.clone();
-                    match &pull_resp.data.txpk.tmst {
-                        // here we will hold the frame until the RxWindow begins
-                        StringOrNum::N(n) => {
-                            let scheduled_time = *n;
-                            let time = time.elapsed().as_micros() as u32;
-                            if scheduled_time > time {
-                                let delay = scheduled_time - time;
-                                tokio::spawn(async move {
-                                    sleep(Duration::from_micros(delay as u64 + 50_000)).await;
-                                    udp_lorawan_sender
-                                        .send(IntermediateEvent::UdpRx(pull_resp, time as u64))
-                                        .await
-                                        .unwrap();
-                                });
-                            } else {
-                                let time_since_scheduled_time = time - scheduled_time;
-                                warn!(
-                                    "UDP packet received after tx time by {} μs",
-                                    time_since_scheduled_time
-                                );
-                            }
-                        }
-                        StringOrNum::S(_) => {
-                            warn!("Warning! UDP packet sent with \"immediate\"");
-                        }
-                    }
+                    udp_lorawan_sender
+                        .send(IntermediateEvent::UdpRx(pull_resp))
+                        .await
+                        .unwrap();
                 }
             }
         });
