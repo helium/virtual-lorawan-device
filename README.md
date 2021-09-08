@@ -2,6 +2,17 @@
 
 # virtual-lorawan-device
 
+This utility allows you to run one or more LoRaWAN devices in pure software (ie: virtually).
+It leverages [a Rust-based LoRaWAN device stack](https://github.com/ivajloip/rust-lorawan)
+and implements its "Radio trait" with the [Semtech GWMP over UDP](https://github.com/helium/semtech-udp)
+interface (see `udp_radio.rs`). This allows you to attach to any Semtech GWMP over UDP Host, 
+such as a traditional LoRaWAN Network Server (LNS), [Helium Miner](https://github.com/helium/miner),
+or the [Helium Light Hotspot](https://github.com/helium/gateway-rs).
+
+To the Semtech GWMP over UDP Host, the default configuration of this utility looks like a 
+single packet forwarder with one or more devices. It is possible to configure many packet
+forwarders with many different hosts as well. PLease see the configuration examples below.
+
 ## Configuration
 
 You'll want to create a file called `settings.toml` and define one more devices. By default,
