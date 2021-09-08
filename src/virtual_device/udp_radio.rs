@@ -61,8 +61,7 @@ impl<'a> UdpRadio<'a> {
                         // here we will hold the frame until the RxWindow begins
                         StringOrNum::N(n) => {
                             let scheduled_time = *n;
-                            let time_elapsed = time.elapsed().as_micros();
-                            let time = time_elapsed as u32;
+                            let time = time.elapsed().as_micros() as u32;
                             if scheduled_time > time {
                                 let delay = scheduled_time - time;
                                 tokio::spawn(async move {
@@ -107,7 +106,8 @@ impl<'a> UdpRadio<'a> {
     pub async fn timer(&mut self, future_time: u32) {
         let timeout_id = rand::random::<usize>();
         self.timeout_id = timeout_id;
-
+        // units are in millis here because
+        // the lorawan device stack operates in millis
         let elapsed = self.time.elapsed().as_millis() as u32;
         // only kick out the packet if its on time
         if future_time > elapsed {
@@ -206,7 +206,9 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
                 if let Err(e) = self.udp_sender.try_send(packet.into()) {
                     panic!("UdpTx Queue Overflow! {}", e)
                 }
-
+                
+                // units are in millis here because
+                // the lorawan device stack operates in millis
                 Ok(radio::Response::TxDone(
                     self.time.elapsed().as_millis() as u32
                 ))
