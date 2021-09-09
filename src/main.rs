@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     let cli = Opt::from_args();
     let instant = Instant::now();
     let settings = settings::Settings::new(&cli.settings)?;
-    let metrics = Metrics::run(([127, 0, 0, 1], 9898).into(), settings.get_ouis());
+    let metrics = Metrics::run(([127, 0, 0, 1], 9898).into(), settings.get_servers());
 
     let pf_map = setup_packet_forwarders(settings.packet_forwarder).await?;
 
@@ -50,10 +50,10 @@ async fn main() -> Result<()> {
             DEFAULT_PF
         };
 
-        let metrics_sender = metrics.get_oui_sender(if let Some(oui) = &device.oui {
-            oui
+        let metrics_sender = metrics.get_server_sender(if let Some(server) = &device.server {
+            server
         } else {
-            &settings.default_oui
+            &settings.default_server
         });
 
         let lorawan_app = virtual_device::VirtualDevice::new(

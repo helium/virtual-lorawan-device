@@ -12,18 +12,26 @@ use prometheus::{Encoder, TextEncoder};
 use tokio::sync::mpsc;
 
 pub struct Sender {
-    oui: String,
+    server: String,
     sender: mpsc::Sender<InternalMessage>,
 }
 
 impl Sender {
     pub async fn send(&mut self, message: Message) -> Result<()> {
-        let oui = self.oui.clone();
+        let server = self.server.clone();
         match message {
-            Message::JoinSuccess(t) => self.sender.send(InternalMessage::JoinSuccess(oui, t)).await,
-            Message::JoinFail => self.sender.send(InternalMessage::JoinFail(oui)).await,
-            Message::DataSuccess(t) => self.sender.send(InternalMessage::DataSuccess(oui, t)).await,
-            Message::DataFail => self.sender.send(InternalMessage::DataFail(oui)).await,
+            Message::JoinSuccess(t) => {
+                self.sender
+                    .send(InternalMessage::JoinSuccess(server, t))
+                    .await
+            }
+            Message::JoinFail => self.sender.send(InternalMessage::JoinFail(server)).await,
+            Message::DataSuccess(t) => {
+                self.sender
+                    .send(InternalMessage::DataSuccess(server, t))
+                    .await
+            }
+            Message::DataFail => self.sender.send(InternalMessage::DataFail(server)).await,
         }
         .map_err(|_| Error::MetricsChannel)
     }
@@ -59,7 +67,7 @@ struct InternalMetrics {
 }
 
 impl Metrics {
-    pub fn run(addr: std::net::SocketAddr, ouis: Vec<&String>) -> Metrics {
+    pub fn run(addr: std::net::SocketAddr, servers: Vec<&String>) -> Metrics {
         // Start Prom Metrics Endpoint
         info!("Prometheus Server listening on http://{}", addr);
         let serve_future = Server::bind(&addr).serve(make_service_fn(|_| async {
@@ -78,47 +86,53 @@ impl Metrics {
             join_success_counter: register_counter_vec!(
                 "join_success",
                 "join success counter",
-                &["oui"]
+                &["server"]
             )
             .unwrap(),
-            join_fail_counter: register_counter_vec!("join_fail", "join fail counter", &["oui"])
+            join_fail_counter: register_counter_vec!("join_fail", "join fail counter", &["server"])
                 .unwrap(),
             data_success_counter: register_counter_vec!(
                 "data_success",
                 "data success counter",
-                &["oui"]
+                &["server"]
             )
             .unwrap(),
-            data_fail_counter: register_counter_vec!("data_fail", "data fail counter", &["oui"])
+            data_fail_counter: register_counter_vec!("data_fail", "data fail counter", &["serer"])
                 .unwrap(),
             join_latency: register_histogram_vec!(
                 "join_latency",
                 "join latency histogram",
-                &["oui"],
+                &["server"],
                 vec![0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
             )
             .unwrap(),
             data_latency: register_histogram_vec!(
                 "data_latency",
                 "data latency histogram",
-                &["oui"],
+                &["server"],
                 vec![0.01, 0.05, 0.1, 0.20, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
             )
             .unwrap(),
         };
 
         // initialize the counters with 0 so they show up in the HTTP scrape
-        for oui in ouis {
+        for server in servers {
             metrics
                 .join_success_counter
-                .with_label_values(&[oui])
+                .with_label_values(&[server])
                 .reset();
-            metrics.join_fail_counter.with_label_values(&[oui]).reset();
+            metrics
+                .join_fail_counter
+                .with_label_values(&[server])
+                .reset();
             metrics
                 .data_success_counter
-                .with_label_values(&[oui])
+                .with_label_values(&[server])
                 .reset();
-            metrics.data_fail_counter.with_label_values(&[oui]).reset();
+            metrics
+                .data_fail_counter
+                .with_label_values(&[server])
+                .reset();
         }
 
         tokio::spawn(async move {
@@ -160,9 +174,9 @@ impl Metrics {
         Metrics { sender }
     }
 
-    pub fn get_oui_sender(&self, oui: &str) -> Sender {
+    pub fn get_server_sender(&self, server: &str) -> Sender {
         Sender {
-            oui: oui.to_string(),
+            server: server.to_string(),
             sender: self.sender.clone(),
         }
     }
