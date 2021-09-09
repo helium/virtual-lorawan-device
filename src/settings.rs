@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
-    pub default_oui: String,
+    pub default_server: String,
     pub device: HashMap<String, Device>,
     pub packet_forwarder: HashMap<String, PacketForwarder>,
 }
@@ -26,16 +26,16 @@ impl Settings {
         c.try_into().map_err(|e| e.into())
     }
 
-    pub fn get_ouis(&self) -> Vec<&String> {
-        let mut ouis = Vec::new();
+    pub fn get_servers(&self) -> Vec<&String> {
+        let mut servers = Vec::new();
         for device in self.device.values() {
-            if let Some(oui) = &device.oui {
-                if !ouis.contains(&oui) {
-                    ouis.push(oui);
+            if let Some(server) = &device.server {
+                if !servers.contains(&server) {
+                    servers.push(server);
                 }
             }
         }
-        ouis
+        servers
     }
 }
 
@@ -44,7 +44,7 @@ pub struct Device {
     pub credentials: Credentials,
     #[serde(default = "default_rejoin_frames")]
     pub rejoin_frames: u32,
-    pub oui: Option<String>,
+    pub server: Option<String>,
     pub packet_forwarder: Option<String>,
 }
 
