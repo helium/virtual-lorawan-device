@@ -97,7 +97,7 @@ impl Metrics {
                 &["server"]
             )
             .unwrap(),
-            data_fail_counter: register_counter_vec!("data_fail", "data fail counter", &["serer"])
+            data_fail_counter: register_counter_vec!("data_fail", "data fail counter", &["server"])
                 .unwrap(),
             join_latency: register_histogram_vec!(
                 "join_latency",
