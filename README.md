@@ -27,12 +27,12 @@ If you want to run one or more virtual devices, your `settings.toml` file may lo
 #[packet_forwarder.default]
 #host = "127.0.0.1:1681"
 
-[devices.one.credentials]
+[device.one.credentials]
 dev_eui = "3ED43BEF1857EF4B"
 app_eui = "35BEED137AC3344B"
 app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 
-[devices.two.credentials]
+[device.two.credentials]
 dev_eui = "3ED43BEF18D7EE4B"
 app_eui = "35BEED137ACD384B"
 app_key = "275AD3615ACB47AA81E6B79A832CC5AE"
@@ -57,7 +57,7 @@ host = "127.0.0.1:1692"
 [device.one]
 packet_forwarder = "pf_one"
 server = "prod"
-[devices.one.credentials]
+[device.one.credentials]
 dev_eui = "3ED43BEF1857EF4B"
 app_eui = "35BEED137AC3344B"
 app_key = "275AD3615ACA47A381E6B79A832CC5AE"
@@ -65,7 +65,7 @@ app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 [device.two]
 packet_forwarder = "pf_two"
 server = "staging"
-[devices.two.credentials]
+[device.two.credentials]
 dev_eui = "3ED43BEF18D7EE4B"
 app_eui = "35BEED137ACD384B"
 app_key = "275AD3615ACB47AA81E6B79A832CC5AE"
