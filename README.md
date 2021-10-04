@@ -41,6 +41,19 @@ app_key = "275AD3615ACB47AA81E6B79A832CC5AE"
 A single "virtual packet forwarder" will be instantiated and it will connect to the `default_host`.
 The two devices will transmit and receive their packets via the single packet forwarder.
 
+#### Region
+
+The default region is US915. EU868 is also supported and may be configured in the following way:
+
+```toml
+[device.one]
+region = "EU868"
+[device.one.credentials]
+dev_eui = "3ED43BEF1857EF4B"
+app_eui = "35BEED137AC3344B"
+app_key = "275AD3615ACA47A381E6B79A832CC5AE"
+```
+
 ### A more complicated configuration
 
 More complicated configurations are possible. You could have multiple virtual packet forwarders:
