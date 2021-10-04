@@ -26,10 +26,16 @@ impl<'a> VirtualDevice<'a> {
         credentials: Credentials,
         metrics_sender: metrics::Sender,
         rejoin_frames: u32,
+        region: settings::Region,
     ) -> Result<VirtualDevice<'a>> {
         let (radio, receiver, sender) = UdpRadio::new(time, udp_runtime).await;
+        let region: region::Configuration = match region {
+            settings::Region::US915 => region::US915::subband(2).into(),
+            settings::Region::EU868 => region::EU868::default().into(),
+        };
+
         let device: Device<udp_radio::UdpRadio, LorawanCrypto> = Device::new(
-            region::US915::subband(2).into(),
+            region,
             radio,
             credentials.deveui_cloned_into_buf()?,
             credentials.appeui_cloned_into_buf()?,

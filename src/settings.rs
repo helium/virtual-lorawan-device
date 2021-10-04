@@ -44,12 +44,23 @@ pub struct Device {
     pub credentials: Credentials,
     #[serde(default = "default_rejoin_frames")]
     pub rejoin_frames: u32,
+    #[serde(default = "default_region")]
+    pub region: Region,
     pub server: Option<String>,
     pub packet_forwarder: Option<String>,
 }
 
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub enum Region {
+    US915,
+    EU868,
+}
+
 fn default_rejoin_frames() -> u32 {
     0xFFFF
+}
+fn default_region() -> Region {
+    Region::US915
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -99,4 +110,18 @@ pub fn mac_string_into_buf(s: &str) -> Result<[u8; 8]> {
     Ok([
         vec[7], vec[6], vec[5], vec[4], vec[3], vec[2], vec[1], vec[0],
     ])
+}
+
+use super::error::Error;
+use std::str::FromStr;
+
+impl FromStr for Region {
+    type Err = Error;
+    fn from_str(input: &str) -> std::result::Result<Region, Self::Err> {
+        match input {
+            "US915" => Ok(Region::US915),
+            "EU868" => Ok(Region::EU868),
+            _ => Err(Error::InvalidRegionString(input.to_string())),
+        }
+    }
 }
