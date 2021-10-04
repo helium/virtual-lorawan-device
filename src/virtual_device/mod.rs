@@ -49,6 +49,10 @@ impl<'a> VirtualDevice<'a> {
     }
 
     pub async fn run(mut self) -> Result<()> {
+        // stagger the starts slightly
+        let random = rand::random::<u64>() % 1000;
+        sleep(Duration::from_millis(random)).await;
+
         // Kickstart activity by trying to join
         self.sender
             .send(IntermediateEvent::NewSession)
