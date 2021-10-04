@@ -19,4 +19,6 @@ pub enum Error {
     MetricsChannel,
     #[error("semtech_udp client_runtime error")]
     SemtechUdpClientRuntime(#[from] semtech_udp::client_runtime::Error),
+    #[error("invalid region string")]
+    InvalidRegionString(String),
 }
