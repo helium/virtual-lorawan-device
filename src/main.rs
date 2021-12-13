@@ -67,6 +67,7 @@ async fn main() -> Result<()> {
             device.credentials,
             metrics_sender,
             device.rejoin_frames,
+            device.secs_between_transmits,
             device.region,
         )
         .await?;

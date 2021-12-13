@@ -16,9 +16,11 @@ pub struct VirtualDevice<'a> {
     sender: Sender<IntermediateEvent>,
     metrics_sender: metrics::Sender,
     rejoin_frames: u32,
+    secs_between_transmits: u64,
 }
 
 impl<'a> VirtualDevice<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         label: String,
         time: Instant,
@@ -26,6 +28,7 @@ impl<'a> VirtualDevice<'a> {
         credentials: Credentials,
         metrics_sender: metrics::Sender,
         rejoin_frames: u32,
+        secs_between_transmits: u64,
         region: settings::Region,
     ) -> Result<VirtualDevice<'a>> {
         let (radio, receiver, sender) = UdpRadio::new(time, udp_runtime).await;
@@ -51,6 +54,7 @@ impl<'a> VirtualDevice<'a> {
             sender,
             metrics_sender,
             rejoin_frames,
+            secs_between_transmits,
         })
     }
 
@@ -223,18 +227,25 @@ impl<'a> VirtualDevice<'a> {
                         while fport == 0 {
                             fport = rand::random();
                         }
-                        self.sender
-                            .send(IntermediateEvent::SendPacket(
-                                vec![
-                                    rand::random(),
-                                    rand::random(),
-                                    rand::random(),
-                                    rand::random(),
-                                ],
-                                fport,
-                                confirmed,
-                            ))
-                            .await?;
+
+                        let sender = self.sender.clone();
+                        let duration = Duration::from_secs(self.secs_between_transmits);
+                        tokio::spawn(async move {
+                            sleep(duration).await;
+                            sender
+                                .send(IntermediateEvent::SendPacket(
+                                    vec![
+                                        rand::random(),
+                                        rand::random(),
+                                        rand::random(),
+                                        rand::random(),
+                                    ],
+                                    fport,
+                                    confirmed,
+                                ))
+                                .await
+                                .unwrap();
+                        });
                     }
                 }
             }
