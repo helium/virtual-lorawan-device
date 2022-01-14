@@ -1,6 +1,8 @@
 use super::*;
 
-use lorawan_device::{radio, region, Device, Event as LorawanEvent, Response as LorawanResponse};
+use lorawan_device::{
+    radio, region, Device, Event as LorawanEvent, JoinMode, Response as LorawanResponse,
+};
 use lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto;
 use semtech_udp::StringOrNum;
 use tokio::time::{sleep, Duration};
@@ -8,9 +10,9 @@ use udp_radio::UdpRadio;
 pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
 mod udp_radio;
 
-pub struct VirtualDevice<'a> {
+pub struct VirtualDevice {
     label: String,
-    device: Device<UdpRadio<'a>, LorawanCrypto>,
+    device: Device<UdpRadio, LorawanCrypto, 512>,
     time: Instant,
     receiver: Receiver<IntermediateEvent>,
     sender: Sender<IntermediateEvent>,
@@ -19,7 +21,7 @@ pub struct VirtualDevice<'a> {
     secs_between_transmits: u64,
 }
 
-impl<'a> VirtualDevice<'a> {
+impl VirtualDevice {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         label: String,
@@ -30,19 +32,22 @@ impl<'a> VirtualDevice<'a> {
         rejoin_frames: u32,
         secs_between_transmits: u64,
         region: settings::Region,
-    ) -> Result<VirtualDevice<'a>> {
+        //mut tx_buffer: [u8; 512],
+    ) -> Result<VirtualDevice> {
         let (radio, receiver, sender) = UdpRadio::new(time, udp_runtime).await;
         let region: region::Configuration = match region {
             settings::Region::US915 => region::US915::subband(2).into(),
             settings::Region::EU868 => region::EU868::default().into(),
         };
 
-        let device: Device<udp_radio::UdpRadio, LorawanCrypto> = Device::new(
+        let device: Device<udp_radio::UdpRadio, LorawanCrypto, 512> = Device::new(
             region,
+            JoinMode::OTAA {
+                deveui: credentials.deveui_cloned_into_buf()?,
+                appeui: credentials.appeui_cloned_into_buf()?,
+                appkey: credentials.appkey_cloned_into_buf()?,
+            },
             radio,
-            credentials.deveui_cloned_into_buf()?,
-            credentials.appeui_cloned_into_buf()?,
-            credentials.appkey_cloned_into_buf()?,
             rand::random::<u32>,
         );
 
@@ -78,7 +83,7 @@ impl<'a> VirtualDevice<'a> {
                 .recv()
                 .await
                 .expect("Channel unexpectedly closed");
-            let (new_state, response) = {
+            let response = {
                 match event {
                     IntermediateEvent::NewSession => {
                         lorawan.handle_event(LorawanEvent::NewSessionRequest)
@@ -87,7 +92,7 @@ impl<'a> VirtualDevice<'a> {
                         if lorawan.get_radio().most_recent_timeout(id) {
                             lorawan.handle_event(LorawanEvent::TimeoutFired)
                         } else {
-                            (lorawan, Ok(LorawanResponse::NoUpdate))
+                            Ok(LorawanResponse::NoUpdate)
                         }
                     }
                     IntermediateEvent::SendPacket(data, fport, confirmed) => {
@@ -129,7 +134,7 @@ impl<'a> VirtualDevice<'a> {
                                 warn!("{:8} Unexpected! UDP packet sent with {:?}", self.label, s);
                             }
                         }
-                        (lorawan, Ok(LorawanResponse::NoUpdate))
+                        Ok(LorawanResponse::NoUpdate)
                     }
                     // at this level, the RadioEvent is being delivered in the appopriate window
                     IntermediateEvent::RadioEvent(frame, time_received) => {
@@ -144,7 +149,7 @@ impl<'a> VirtualDevice<'a> {
                     }
                 }
             };
-            lorawan = new_state;
+            //lorawan = new_state;
             let (send_uplink, confirmed) = {
                 let (mut send_uplink, mut confirmed) = (false, true);
                 match response {
