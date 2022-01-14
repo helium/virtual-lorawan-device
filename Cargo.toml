@@ -11,8 +11,8 @@ env_logger = "0"
 heapless = "0"
 hex = "0"
 log = "0"
-lorawan-encoding = { git = "https://github.com/ivajloip/rust-lorawan.git", rev = "674eca001185caaa8eb9d1f2e6d203760d94c7b9" }
-lorawan-device = { git = "https://github.com/ivajloip/rust-lorawan.git", rev = "674eca001185caaa8eb9d1f2e6d203760d94c7b9" }
+lorawan-encoding = { git = "https://github.com/ivajloip/rust-lorawan.git" }
+lorawan-device = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 semtech-udp = { version = ">=0.7,<1", features=["client"] }
 serde = "1"
 structopt = "0"

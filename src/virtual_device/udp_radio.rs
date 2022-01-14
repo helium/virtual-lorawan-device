@@ -1,10 +1,8 @@
+use log::info;
 use lorawan_device::{radio, Timings};
 use semtech_udp::client_runtime;
 use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor};
-use std::{
-    marker::PhantomData,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 pub use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::time::sleep;
 
@@ -23,23 +21,24 @@ pub enum IntermediateEvent {
 pub enum Response {}
 
 #[derive(Debug)]
-pub struct UdpRadio<'a> {
+pub struct UdpRadio {
     udp_sender: Sender<client_runtime::TxMessage>,
     lorawan_sender: Sender<IntermediateEvent>,
-    rx_buffer: Buffer,
     time: Instant,
     settings: Settings,
     timeout_id: usize,
-    phantom: PhantomData<&'a u8>,
     window_start: u32,
+    rx_buffer: [u8; 512],
+    pos: usize,
+    counter: usize,
 }
 
-impl<'a> UdpRadio<'a> {
+impl UdpRadio {
     pub async fn new(
         time: Instant,
         udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
     ) -> (
-        UdpRadio<'a>,
+        UdpRadio,
         tokio::sync::mpsc::Receiver<IntermediateEvent>,
         tokio::sync::mpsc::Sender<IntermediateEvent>,
     ) {
@@ -64,14 +63,15 @@ impl<'a> UdpRadio<'a> {
 
         (
             UdpRadio {
-                rx_buffer: Buffer::default(),
                 time,
                 settings: Settings::default(),
                 udp_sender,
                 timeout_id: 0,
-                phantom: PhantomData::default(),
                 lorawan_sender: lorawan_sender.clone(),
                 window_start: 0,
+                rx_buffer: [0; 512],
+                pos: 0,
+                counter: 0,
             },
             lorawan_receiver,
             lorawan_sender,
@@ -104,49 +104,22 @@ impl<'a> UdpRadio<'a> {
         self.timeout_id == timeout_id
     }
 }
-use heapless::Vec as HVec;
-#[derive(Default, Debug)]
-pub struct Buffer {
-    data: HVec<u8, 255>,
-}
 
-impl lorawan_device::radio::PhyRxTxBuf for Buffer {
-    fn clear(&mut self) {
-        self.data.clear();
-    }
-    fn extend(&mut self, buf: &[u8]) {
-        self.data.extend_from_slice(buf).unwrap();
-    }
-}
-
-impl std::convert::AsMut<[u8]> for Buffer {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.data.as_mut()
-    }
-}
-
-impl std::convert::AsRef<[u8]> for Buffer {
-    fn as_ref(&self) -> &[u8] {
-        self.data.as_ref()
-    }
-}
-
-use lorawan_device::radio::PhyRxTxBuf;
 use lorawan_device::radio::{
     Error as LoraError, Event as LoraEvent, Response as LoraResponse, RxQuality,
 };
 
-impl<'a> radio::PhyRxTx for UdpRadio<'a> {
+impl radio::PhyRxTx for UdpRadio {
     type PhyError = Error;
     type PhyResponse = Response;
     type PhyEvent = Box<semtech_udp::pull_resp::Packet>;
-    type PhyBuf = Buffer;
+
     fn get_mut_radio(&mut self) -> &mut Self {
         self
     }
 
-    fn get_received_packet(&mut self) -> &mut Buffer {
-        &mut self.rx_buffer
+    fn get_received_packet(&mut self) -> &mut [u8] {
+        &mut self.rx_buffer[0..self.pos]
     }
 
     fn handle_event(
@@ -156,11 +129,12 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
         use semtech_udp::push_data::*;
         match event {
             radio::Event::TxRequest(tx_config, buffer) => {
-                let size = buffer.data.len() as u64;
+                let size = buffer.len() as u64;
                 let tmst = self.time.elapsed().as_micros() as u32;
+                info!("Transmit tmst: {}", tmst);
                 let settings = Settings::from(tx_config);
                 let mut data = Vec::new();
-                data.extend_from_slice(buffer.data.as_ref());
+                data.extend_from_slice(buffer);
                 let rxpk = RxPkV1 {
                     chan: 0,
                     codr: settings.get_codr(),
@@ -175,6 +149,7 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
                     size,
                     stat: semtech_udp::push_data::CRC::OK,
                     tmst,
+                    time: None,
                 };
                 let packet = push_data::Packet::from_rxpk(RxPk::V1(rxpk));
 
@@ -194,10 +169,29 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
             }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
             radio::Event::PhyEvent(packet) => {
-                self.rx_buffer.clear();
-                self.rx_buffer.extend(packet.data.txpk.data.as_slice());
-                let ack = packet
-                    .into_ack_for_gateway(semtech_udp::MacAddress::new(&[0, 0, 0, 0, 0, 0, 0, 0]));
+                self.pos = packet.data.txpk.data.len();
+                for (i, el) in packet.data.txpk.data.iter().enumerate() {
+                    self.rx_buffer[i] = *el;
+                }
+                if let semtech_udp::StringOrNum::N(num) = packet.data.txpk.tmst {
+                    info!("Receive tmst: {}", num);
+                }
+                println!("{}", self.counter);
+                self.counter += 1;
+                let ack = if self.counter == 3 {
+                    println!("send nack");
+                    packet.into_nack_with_error_for_gateway(
+                        semtech_udp::tx_ack::Error::TooLate,
+                        semtech_udp::MacAddress::new(&[0, 0, 0, 0, 0, 0, 0, 0]),
+                    )
+                } else {
+                    packet.into_ack_for_gateway(semtech_udp::MacAddress::new(&[
+                        0, 0, 0, 0, 0, 0, 0, 0,
+                    ]))
+                };
+
+                // let ack =
+
                 let sender = self.udp_sender.clone();
                 // we are not in an async context so we must spawn this off
                 tokio::task::spawn(async move { sender.send(ack.into()).await });
@@ -207,7 +201,7 @@ impl<'a> radio::PhyRxTx for UdpRadio<'a> {
     }
 }
 
-impl<'a> Timings for UdpRadio<'a> {
+impl Timings for UdpRadio {
     fn get_rx_window_offset_ms(&self) -> i32 {
         20
     }
