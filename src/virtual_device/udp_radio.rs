@@ -30,7 +30,6 @@ pub struct UdpRadio {
     window_start: u32,
     rx_buffer: [u8; 512],
     pos: usize,
-    counter: usize,
 }
 
 impl UdpRadio {
@@ -71,7 +70,6 @@ impl UdpRadio {
                 window_start: 0,
                 rx_buffer: [0; 512],
                 pos: 0,
-                counter: 0,
             },
             lorawan_receiver,
             lorawan_sender,
@@ -173,24 +171,8 @@ impl radio::PhyRxTx for UdpRadio {
                 for (i, el) in packet.data.txpk.data.iter().enumerate() {
                     self.rx_buffer[i] = *el;
                 }
-                if let semtech_udp::StringOrNum::N(num) = packet.data.txpk.tmst {
-                    info!("Receive tmst: {}", num);
-                }
-                println!("{}", self.counter);
-                self.counter += 1;
-                let ack = if self.counter == 3 {
-                    println!("send nack");
-                    packet.into_nack_with_error_for_gateway(
-                        semtech_udp::tx_ack::Error::TooLate,
-                        semtech_udp::MacAddress::new(&[0, 0, 0, 0, 0, 0, 0, 0]),
-                    )
-                } else {
-                    packet.into_ack_for_gateway(semtech_udp::MacAddress::new(&[
-                        0, 0, 0, 0, 0, 0, 0, 0,
-                    ]))
-                };
-
-                // let ack =
+                let ack = packet
+                    .into_ack_for_gateway(semtech_udp::MacAddress::new(&[0, 0, 0, 0, 0, 0, 0, 0]));
 
                 let sender = self.udp_sender.clone();
                 // we are not in an async context so we must spawn this off
