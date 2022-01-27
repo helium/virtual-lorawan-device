@@ -101,7 +101,7 @@ impl Credentials {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct PacketForwarder {
     mac: String,
-    pub host: std::net::SocketAddr,
+    pub host: String,
 }
 
 impl PacketForwarder {
