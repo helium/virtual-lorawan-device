@@ -2,7 +2,7 @@
 name = "virtual-lorawan-device"
 version = "0.2.10"
 authors = ["lthiery <thiery.louis@gmail.com>"]
-edition = "2018"
+edition = "2021"
 publish = false
 
 [dependencies]
