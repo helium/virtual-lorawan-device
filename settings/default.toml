@@ -3,5 +3,5 @@ default_packet_forwarder = "default"
 # if any explicit packet forwarders are defined in settings.toml,
 # this packet forwarder is pruned from the map
 [packet_forwarder.default]
-host = "127.0.0.1:1680"
+host = "localhost:1680"
 mac = "0807060504030201"
