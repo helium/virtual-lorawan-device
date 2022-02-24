@@ -13,11 +13,11 @@ hex = "0"
 log = "0"
 lorawan-encoding = { git = "https://github.com/helium/rust-lorawan.git" }
 lorawan-device = { git = "https://github.com/helium/rust-lorawan.git" }
-semtech-udp = { version = ">=0.7,<1", features=["client"] }
+semtech-udp = { version = ">=0.7,<0.8", features=["client"] }
 serde = "1"
 structopt = "0"
 thiserror = "1"
-config = {version="0", default-features=false, features=["toml"]}
+config = { version="0.11", default-features=false, features=["toml"]}
 rand = "0"
 prometheus = "0"
 hyper = { version = "0", features = ["full"] }
