@@ -50,9 +50,7 @@ impl VirtualDevice {
             radio,
             rand::random::<u32>,
         );
-
-        //device.set_datarate(lorawan_device::region::DR::_4);
-
+        
         Ok(VirtualDevice {
             label,
             device,
