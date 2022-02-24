@@ -32,7 +32,6 @@ impl VirtualDevice {
         rejoin_frames: u32,
         secs_between_transmits: u64,
         region: settings::Region,
-        //mut tx_buffer: [u8; 512],
     ) -> Result<VirtualDevice> {
         let (radio, receiver, sender) = UdpRadio::new(time, udp_runtime).await;
         let region: region::Configuration = match region {
@@ -40,7 +39,7 @@ impl VirtualDevice {
             settings::Region::EU868 => region::EU868::default().into(),
         };
 
-        let device: Device<udp_radio::UdpRadio, LorawanCrypto, 512> = Device::new(
+        let mut device: Device<udp_radio::UdpRadio, LorawanCrypto, 512> = Device::new(
             region,
             JoinMode::OTAA {
                 deveui: credentials.deveui_cloned_into_buf()?,
