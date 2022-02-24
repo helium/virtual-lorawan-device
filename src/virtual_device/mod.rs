@@ -50,7 +50,7 @@ impl VirtualDevice {
             radio,
             rand::random::<u32>,
         );
-        
+
         Ok(VirtualDevice {
             label,
             device,
