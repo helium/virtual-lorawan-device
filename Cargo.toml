@@ -1,6 +1,6 @@
 [package]
 name = "virtual-lorawan-device"
-version = "0.2.12-alpha.0"
+version = "0.2.12"
 authors = ["lthiery <thiery.louis@gmail.com>"]
 edition = "2021"
 publish = false
