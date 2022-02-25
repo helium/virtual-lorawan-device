@@ -39,7 +39,7 @@ impl VirtualDevice {
             settings::Region::EU868 => region::EU868::default().into(),
         };
 
-        let mut device: Device<udp_radio::UdpRadio, LorawanCrypto, 512> = Device::new(
+        let device: Device<udp_radio::UdpRadio, LorawanCrypto, 512> = Device::new(
             region,
             JoinMode::OTAA {
                 deveui: credentials.deveui_cloned_into_buf()?,
