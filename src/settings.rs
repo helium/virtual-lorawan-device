@@ -115,7 +115,7 @@ impl PacketForwarder {
 pub fn mac_string_into_buf(s: &str) -> Result<[u8; 8]> {
     let vec = hex::decode(s)?;
     Ok([
-        vec[7], vec[6], vec[5], vec[4], vec[3], vec[2], vec[1], vec[0],
+        vec[0], vec[1], vec[2], vec[3], vec[4], vec[5], vec[6], vec[7],
     ])
 }
 
