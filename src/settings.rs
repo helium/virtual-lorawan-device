@@ -8,6 +8,8 @@ pub struct Settings {
     pub default_server: String,
     pub device: HashMap<String, Device>,
     pub packet_forwarder: HashMap<String, PacketForwarder>,
+    pub metrics_server: String,
+    pub metrics_port: u16,
 }
 
 impl Settings {

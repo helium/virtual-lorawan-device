@@ -1,7 +1,7 @@
 use log::{debug, error, info, warn};
 use metrics::Metrics;
 use semtech_udp::client_runtime::UdpRuntime;
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, time::Instant};
+use std::{collections::HashMap, net::{SocketAddr, IpAddr}, path::PathBuf, time::Instant};
 use structopt::StructOpt;
 
 mod error;
@@ -39,7 +39,9 @@ async fn main() -> Result<()> {
     let cli = Opt::from_args();
     let instant = Instant::now();
     let settings = settings::Settings::new(&cli.settings)?;
-    let metrics = Metrics::run(([127, 0, 0, 1], 9898).into(), settings.get_servers());
+    let metrics_server: IpAddr = settings.metrics_server.parse()?;
+    let metrics = Metrics::run((metrics_server, settings.metrics_port).into(),
+                               settings.get_servers());
 
     let pf_map = setup_packet_forwarders(settings.packet_forwarder).await?;
 

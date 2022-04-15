@@ -1,5 +1,7 @@
 default_server = "prod"
 default_packet_forwarder = "default"
+metrics_server = "127.0.0.1"
+metrics_port = 9898
 # if any explicit packet forwarders are defined in settings.toml,
 # this packet forwarder is pruned from the map
 [packet_forwarder.default]
