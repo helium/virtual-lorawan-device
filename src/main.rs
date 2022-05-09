@@ -20,8 +20,12 @@ pub use settings::{mac_string_into_buf, Credentials};
 #[derive(Debug, StructOpt)]
 #[structopt(name = "virtual-lorawan-device", about = "LoRaWAN test device utility")]
 pub struct Opt {
+    /// Path to settings subdirectory
     #[structopt(short, long, default_value = "./settings")]
     pub settings: PathBuf,
+    /// Limit number of devices to spawn
+    #[structopt(short, long)]
+    pub limit: Option<usize>,
 }
 
 const DEFAULT_PF: &str = "default";
@@ -49,10 +53,15 @@ async fn main() -> Result<()> {
         (metrics_server, settings.metrics_port).into(),
         settings.get_servers(),
     );
+    let device_limit = if let Some(limit) = cli.limit {
+        limit
+    } else {
+        usize::MAX
+    };
 
     let pf_map = setup_packet_forwarders(settings.packet_forwarder).await?;
 
-    for (label, device) in settings.device {
+    for (label, device) in settings.device.into_iter().take(device_limit) {
         let packet_forwarder = if let Some(pf) = &device.packet_forwarder {
             pf
         } else {
