@@ -11,7 +11,7 @@ env_logger = "0"
 heapless = "0"
 hex = "0"
 log = "0"
-lorawan-encoding = { git = "https://github.com/helium/rust-lorawan.git" }
+lorawan = { git = "https://github.com/helium/rust-lorawan.git" }
 lorawan-device = { git = "https://github.com/helium/rust-lorawan.git" }
 semtech-udp = { version = ">=0.7,<0.8", features=["client"] }
 serde = "1"

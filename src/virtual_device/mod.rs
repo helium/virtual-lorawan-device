@@ -1,9 +1,9 @@
 use super::*;
 
+use lorawan::default_crypto::DefaultFactory as LorawanCrypto;
 use lorawan_device::{
     radio, region, Device, Event as LorawanEvent, JoinMode, Response as LorawanResponse,
 };
-use lorawan_encoding::default_crypto::DefaultFactory as LorawanCrypto;
 use semtech_udp::StringOrNum;
 use tokio::time::{sleep, Duration};
 use udp_radio::UdpRadio;
