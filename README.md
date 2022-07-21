@@ -17,7 +17,7 @@ forwarders with many different hosts as well. PLease see the configuration examp
 
 You'll want to create a file called `settings.toml` and define one more devices. By default,
 this file is expected in the `settings` directory from where the application is launched. This
-may be overriden with the `--config` option.
+may be overriden with the `--settings` option.
 
 ### A simple configuration
 
