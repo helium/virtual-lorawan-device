@@ -48,6 +48,8 @@ pub struct Device {
     pub rejoin_frames: u32,
     #[serde(default = "default_secs_between_transmits")]
     pub secs_between_transmits: u64,
+    #[serde(default = "default_secs_between_join_transmits")]
+    pub secs_between_join_transmits: u64,
     #[serde(default = "default_region")]
     pub region: Region,
     pub server: Option<String>,
@@ -61,7 +63,10 @@ pub enum Region {
 }
 
 fn default_secs_between_transmits() -> u64 {
-    0
+    5
+}
+fn default_secs_between_join_transmits() -> u64 {
+    5
 }
 fn default_rejoin_frames() -> u32 {
     0xFFFF

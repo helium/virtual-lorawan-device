@@ -19,6 +19,7 @@ pub struct VirtualDevice {
     metrics_sender: metrics::Sender,
     rejoin_frames: u32,
     secs_between_transmits: u64,
+    secs_between_join_transmits: u64,
 }
 
 impl VirtualDevice {
@@ -31,6 +32,7 @@ impl VirtualDevice {
         metrics_sender: metrics::Sender,
         rejoin_frames: u32,
         secs_between_transmits: u64,
+        secs_between_join_transmits: u64,
         region: settings::Region,
     ) -> Result<VirtualDevice> {
         let (radio, receiver, sender) = UdpRadio::new(time, udp_runtime).await;
@@ -59,6 +61,7 @@ impl VirtualDevice {
             metrics_sender,
             rejoin_frames,
             secs_between_transmits,
+            secs_between_join_transmits,
         })
     }
 
@@ -200,8 +203,17 @@ impl VirtualDevice {
                         }
                         LorawanResponse::NoJoinAccept => {
                             metrics_sender.send(metrics::Message::JoinFail).await?;
-                            self.sender.send(IntermediateEvent::NewSession).await?;
-                            warn!("{:8} No Join Accept Received", self.label)
+                            let duration = Duration::from_secs(self.secs_between_join_transmits);
+                            let sender = self.sender.clone();
+                            tokio::spawn(async move {
+                                sleep(duration).await;
+                                sender.send(IntermediateEvent::NewSession).await.unwrap();
+                            });
+                            warn!(
+                                "{:8} No Join Accept Received, sending again in: {} ms",
+                                self.label,
+                                duration.as_millis()
+                            )
                         }
                         LorawanResponse::SessionExpired => {
                             self.sender.send(IntermediateEvent::NewSession).await?;

@@ -86,6 +86,7 @@ async fn main() -> Result<()> {
             metrics_sender,
             device.rejoin_frames,
             device.secs_between_transmits,
+            device.secs_between_join_transmits,
             device.region,
         )
         .await?;
