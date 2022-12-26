@@ -185,6 +185,7 @@ async fn packet_muxer(
                                     }
                                 });
                             }
+                            downlink.ack().await?;
                         } else {
                             let time_since_scheduled_time = time - scheduled_time;
                             if time_since_scheduled_time > 1000 {

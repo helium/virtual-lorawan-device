@@ -155,8 +155,6 @@ impl radio::PhyRxTx for UdpRadio {
                 for (i, el) in data.iter().enumerate() {
                     self.rx_buffer[i] = *el;
                 }
-                // we are not in an async context so we must spawn this off
-                tokio::task::spawn(packet.ack());
                 Ok(LoraResponse::RxDone(RxQuality::new(-120, 5)))
             }
         }
