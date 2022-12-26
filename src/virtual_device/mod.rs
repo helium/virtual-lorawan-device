@@ -4,22 +4,35 @@ use lorawan::default_crypto::DefaultFactory as LorawanCrypto;
 use lorawan_device::{
     radio, region, Device, Event as LorawanEvent, JoinMode, Response as LorawanResponse,
 };
-use semtech_udp::StringOrNum;
+use semtech_udp::client_runtime::DownlinkRequest;
 use tokio::time::{sleep, Duration};
 use udp_radio::UdpRadio;
-pub(crate) use udp_radio::{IntermediateEvent, Receiver, Sender};
+pub(crate) use udp_radio::{mpsc, IntermediateEvent};
 mod udp_radio;
 
 pub struct VirtualDevice {
     label: String,
     device: Device<UdpRadio, LorawanCrypto, 512>,
     time: Instant,
-    receiver: Receiver<IntermediateEvent>,
-    sender: Sender<IntermediateEvent>,
+    receiver: mpsc::Receiver<IntermediateEvent>,
+    sender: mpsc::Sender<IntermediateEvent>,
     metrics_sender: metrics::Sender,
     rejoin_frames: u32,
     secs_between_transmits: u64,
     secs_between_join_transmits: u64,
+}
+
+pub struct PacketSender {
+    sender: mpsc::Sender<IntermediateEvent>,
+}
+
+impl PacketSender {
+    pub async fn send(&self, downlink: Box<DownlinkRequest>) -> Result {
+        self.sender
+            .send(IntermediateEvent::UdpRx(downlink))
+            .await
+            .map_err(Error::SendingDownlinkToUdpRadio)
+    }
 }
 
 impl VirtualDevice {
@@ -27,15 +40,15 @@ impl VirtualDevice {
     pub async fn new(
         label: String,
         time: Instant,
-        udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
+        client_tx: ClientTx,
         credentials: Credentials,
         metrics_sender: metrics::Sender,
         rejoin_frames: u32,
         secs_between_transmits: u64,
         secs_between_join_transmits: u64,
         region: settings::Region,
-    ) -> Result<VirtualDevice> {
-        let (radio, receiver, sender) = UdpRadio::new(time, udp_runtime).await;
+    ) -> Result<(PacketSender, VirtualDevice)> {
+        let (radio, receiver, sender) = UdpRadio::new(time, client_tx).await;
         let region: region::Configuration = match region {
             settings::Region::US915 => region::US915::subband(2).into(),
             settings::Region::EU868 => region::EU868::default().into(),
@@ -52,17 +65,22 @@ impl VirtualDevice {
             rand::random::<u32>,
         );
 
-        Ok(VirtualDevice {
-            label,
-            device,
-            time,
-            receiver,
-            sender,
-            metrics_sender,
-            rejoin_frames,
-            secs_between_transmits,
-            secs_between_join_transmits,
-        })
+        Ok((
+            PacketSender {
+                sender: sender.clone(),
+            },
+            VirtualDevice {
+                label,
+                device,
+                time,
+                receiver,
+                sender,
+                metrics_sender,
+                rejoin_frames,
+                secs_between_transmits,
+                secs_between_join_transmits,
+            },
+        ))
     }
 
     pub async fn run(mut self) -> Result<()> {
@@ -110,42 +128,41 @@ impl VirtualDevice {
                     // UdpRx processes the raw UDP frame and delays it if necessary
                     IntermediateEvent::UdpRx(frame) => {
                         let self_sender = self.sender.clone();
-                        match &frame.data.txpk.tmst {
-                            // we will hold the frame until the RxWindow begins
-                            StringOrNum::N(n) => {
-                                let scheduled_time = *n;
-                                let time = self.time.elapsed().as_micros() as u32;
-                                if scheduled_time > time {
-                                    let delay = scheduled_time - time;
-                                    tokio::spawn(async move {
-                                        sleep(Duration::from_micros(delay as u64 + 50_000)).await;
-                                        self_sender
-                                            .send(IntermediateEvent::RadioEvent(frame, time as u64))
-                                            .await
-                                            .unwrap();
-                                    });
-                                } else {
-                                    let time_since_scheduled_time = time - scheduled_time;
-                                    warn!(
-                                        "{:8} UDP packet received after tx time by {} μs",
-                                        self.label, time_since_scheduled_time
-                                    );
-                                }
+                        if let Some(scheduled_time) = frame.pull_resp.data.txpk.time.tmst() {
+                            let time = self.time.elapsed().as_micros() as u32;
+                            if scheduled_time > time {
+                                let delay = scheduled_time - time;
+                                tokio::spawn(async move {
+                                    sleep(Duration::from_micros(delay as u64 + 50_000)).await;
+                                    self_sender
+                                        .send(IntermediateEvent::RadioEvent(frame, time as u64))
+                                        .await
+                                        .unwrap();
+                                });
+                            } else {
+                                let time_since_scheduled_time = time - scheduled_time;
+                                warn!(
+                                    "{:8} UDP packet received after tx time by {} μs",
+                                    self.label, time_since_scheduled_time
+                                );
                             }
-                            StringOrNum::S(s) => {
-                                warn!("{:8} Unexpected! UDP packet sent with {:?}", self.label, s);
-                            }
+                        } else {
+                            warn!(
+                                "{:8} Unexpected! UDP packet to transmit radio packet immediately",
+                                self.label
+                            );
                         }
                         Ok(LorawanResponse::NoUpdate)
                     }
-                    // at this level, the RadioEvent is being delivered in the appopriate window
+                    // at this level, the RadioEvent is being delivered in the appropriate window
                     IntermediateEvent::RadioEvent(frame, time_received) => {
-                        time_remaining = match frame.data.txpk.tmst {
-                            semtech_udp::StringOrNum::N(tmst) => {
-                                Some(tmst as i64 - time_received as i64)
-                            }
-                            semtech_udp::StringOrNum::S(_) => None,
-                        };
+                        frame
+                            .pull_resp
+                            .data
+                            .txpk
+                            .time
+                            .tmst()
+                            .map(|tmst| tmst as i64 - time_received as i64);
                         lorawan
                             .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame)))
                     }

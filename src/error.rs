@@ -21,4 +21,8 @@ pub enum Error {
     SemtechUdpClientRuntime(#[from] semtech_udp::client_runtime::Error),
     #[error("invalid region string")]
     InvalidRegionString(String),
+    #[error("error sending downlink to upd_radio instance: {0}")]
+    SendingDownlinkToUdpRadio(mpsc::error::SendError<virtual_device::IntermediateEvent>),
+    #[error("receive channel from semtech_udp::client_runtime unexpectedly closed")]
+    RxChannelSemtechUdpClientRuntimeClosed,
 }
