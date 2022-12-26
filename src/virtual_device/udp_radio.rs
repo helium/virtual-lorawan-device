@@ -10,7 +10,6 @@ use tokio::time::sleep;
 // I need some intermediate event because of Lifetimes
 // maybe there's a cleaner way of doing this
 pub enum IntermediateEvent {
-    UdpRx(Box<DownlinkRequest>),
     RadioEvent(Box<DownlinkRequest>, u64),
     NewSession,
     Timeout(usize),

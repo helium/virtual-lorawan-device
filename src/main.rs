@@ -9,7 +9,10 @@ use std::{
     time::Instant,
 };
 use structopt::StructOpt;
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc,
+    time::{sleep, Duration},
+};
 
 mod error;
 mod metrics;
@@ -107,7 +110,7 @@ async fn main() -> Result<()> {
         let shutdown_trigger = trigger_listener.clone();
         tokio::spawn(udp_runtime.run(shutdown_trigger));
         let shutdown_trigger = trigger_listener.clone();
-        tokio::spawn(packet_muxer(client_rx, senders, shutdown_trigger));
+        tokio::spawn(packet_muxer(instant, client_rx, senders, shutdown_trigger));
     }
 
     tokio::signal::ctrl_c().await?;
@@ -155,6 +158,7 @@ async fn setup_packet_forwarders(
 }
 
 async fn packet_muxer(
+    instant: Instant,
     mut client_rx: ClientRx,
     senders: Vec<virtual_device::PacketSender>,
     trigger: triggered::Listener,
@@ -165,9 +169,41 @@ async fn packet_muxer(
             loop {
                 let msg = client_rx.recv().await.ok_or(Error::RxChannelSemtechUdpClientRuntimeClosed)?;
                 if let client_runtime::Event::DownlinkRequest(downlink) = msg {
-                    let downlink = Box::new(downlink);
-                    for sender in &senders {
-                        sender.send(downlink.clone()).await?;
+
+                    if let Some(scheduled_time) = downlink.pull_resp.data.txpk.time.tmst() {
+                        let time = instant.elapsed().as_micros() as u32;
+                        if scheduled_time > time {
+                            let downlink = Box::new(downlink).clone();
+                            let delay = scheduled_time - time;
+                            for sender in &senders {
+                                let sender = sender.clone();
+                                let downlink = downlink.clone();
+                                tokio::spawn(async move {
+                                    sleep(Duration::from_micros(delay as u64 + 50_000)).await;
+                                    if let Err(e) = sender.send(downlink, delay as u64).await {
+                                        error!("Error sending packet to virtual-lorawan-device instance: {e}");
+                                    }
+                                });
+                            }
+                        } else {
+                            let time_since_scheduled_time = time - scheduled_time;
+                            if time_since_scheduled_time > 1000 {
+                                warn!(
+                                    "UDP packet received after tx time by {} ms",
+                                    time_since_scheduled_time / 1000
+                                );
+                            } else {
+                                warn!(
+                                    "UDP packet received after tx time by {} μs",
+                                    time_since_scheduled_time
+                                );
+                            }
+                            downlink.nack(semtech_udp::tx_ack::Error::TooLate).await?;
+                        }
+                    } else {
+                        warn!(
+                            "Unexpected! UDP packet to transmit radio packet immediately"
+                        );
                     }
                 }
             }
