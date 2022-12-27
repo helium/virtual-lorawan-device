@@ -84,9 +84,7 @@ impl UdpRadio {
     }
 }
 
-use lorawan_device::radio::{
-    Error as LoraError, Event as LoraEvent, Response as LoraResponse, RxQuality,
-};
+use lorawan_device::radio::{Event as LoraEvent, Response as LoraResponse, RxQuality};
 
 impl radio::PhyRxTx for UdpRadio {
     type PhyError = Error;
@@ -104,7 +102,7 @@ impl radio::PhyRxTx for UdpRadio {
     fn handle_event(
         &mut self,
         event: LoraEvent<Self>,
-    ) -> Result<LoraResponse<Self>, LoraError<Self>> {
+    ) -> Result<LoraResponse<Self>, radio::Error<Error>> {
         use semtech_udp::push_data::*;
         match event {
             radio::Event::TxRequest(tx_config, buffer) => {
