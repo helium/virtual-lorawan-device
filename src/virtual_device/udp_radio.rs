@@ -1,17 +1,16 @@
 use log::info;
 use lorawan_device::{radio, Timings};
-use semtech_udp::client_runtime;
-use semtech_udp::{push_data, Bandwidth, CodingRate, DataRate, SpreadingFactor};
+use semtech_udp::client_runtime::{ClientTx, DownlinkRequest};
+use semtech_udp::{Bandwidth, CodingRate, DataRate, SpreadingFactor};
 use std::time::{Duration, Instant};
-pub use tokio::sync::mpsc::{self, Receiver, Sender};
+pub use tokio::sync::mpsc;
 use tokio::time::sleep;
 
 #[derive(Debug)]
 // I need some intermediate event because of Lifetimes
 // maybe there's a cleaner way of doing this
 pub enum IntermediateEvent {
-    UdpRx(Box<semtech_udp::pull_resp::Packet>),
-    RadioEvent(Box<semtech_udp::pull_resp::Packet>, u64),
+    RadioEvent(Box<DownlinkRequest>, u64),
     NewSession,
     Timeout(usize),
     SendPacket(Vec<u8>, u8, bool),
@@ -22,8 +21,8 @@ pub enum Response {}
 
 #[derive(Debug)]
 pub struct UdpRadio {
-    udp_sender: Sender<client_runtime::TxMessage>,
-    lorawan_sender: Sender<IntermediateEvent>,
+    client_tx: ClientTx,
+    lorawan_sender: mpsc::Sender<IntermediateEvent>,
     time: Instant,
     settings: Settings,
     timeout_id: usize,
@@ -35,36 +34,18 @@ pub struct UdpRadio {
 impl UdpRadio {
     pub async fn new(
         time: Instant,
-        udp_runtime: &semtech_udp::client_runtime::UdpRuntime,
+        client_tx: ClientTx,
     ) -> (
         UdpRadio,
-        tokio::sync::mpsc::Receiver<IntermediateEvent>,
-        tokio::sync::mpsc::Sender<IntermediateEvent>,
+        mpsc::Receiver<IntermediateEvent>,
+        mpsc::Sender<IntermediateEvent>,
     ) {
-        let (mut udp_receiver, udp_sender) = (udp_runtime.subscribe(), udp_runtime.publish_to());
-
         let (lorawan_sender, lorawan_receiver) = mpsc::channel(100);
-        let udp_lorawan_sender = lorawan_sender.clone();
-
-        // this task receives downlinks and sends them to the lorawan layer as if a PHY radio
-        // received the frame
-        tokio::spawn(async move {
-            loop {
-                let event = udp_receiver.recv().await.unwrap();
-                if let semtech_udp::Packet::Down(semtech_udp::Down::PullResp(pull_resp)) = event {
-                    udp_lorawan_sender
-                        .send(IntermediateEvent::UdpRx(pull_resp))
-                        .await
-                        .unwrap();
-                }
-            }
-        });
-
         (
             UdpRadio {
                 time,
                 settings: Settings::default(),
-                udp_sender,
+                client_tx,
                 timeout_id: 0,
                 lorawan_sender: lorawan_sender.clone(),
                 window_start: 0,
@@ -110,7 +91,7 @@ use lorawan_device::radio::{
 impl radio::PhyRxTx for UdpRadio {
     type PhyError = Error;
     type PhyResponse = Response;
-    type PhyEvent = Box<semtech_udp::pull_resp::Packet>;
+    type PhyEvent = Box<DownlinkRequest>;
 
     fn get_mut_radio(&mut self) -> &mut Self {
         self
@@ -145,15 +126,17 @@ impl radio::PhyRxTx for UdpRadio {
                     rssi: -112,
                     rssis: None,
                     size,
-                    stat: semtech_udp::push_data::CRC::OK,
+                    stat: CRC::OK,
                     tmst,
                     time: None,
                 };
-                let packet = push_data::Packet::from_rxpk(RxPk::V1(rxpk));
-
-                if let Err(e) = self.udp_sender.try_send(packet.into()) {
-                    panic!("UdpTx Queue Overflow! {}", e)
-                }
+                let packet = Packet::from_rxpk([0, 0, 0, 0, 0, 0, 0, 0].into(), RxPk::V1(rxpk));
+                let sender = self.client_tx.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = sender.send(packet).await {
+                        panic!("UdpTx Queue Overflow! {}", e)
+                    }
+                });
 
                 // units are in millis here because
                 // the lorawan device stack operates in millis
@@ -167,16 +150,11 @@ impl radio::PhyRxTx for UdpRadio {
             }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
             radio::Event::PhyEvent(packet) => {
-                self.pos = packet.data.txpk.data.len();
-                for (i, el) in packet.data.txpk.data.iter().enumerate() {
+                let data = packet.pull_resp.data.txpk.data.as_ref();
+                self.pos = data.len();
+                for (i, el) in data.iter().enumerate() {
                     self.rx_buffer[i] = *el;
                 }
-                let ack = packet
-                    .into_ack_for_gateway(semtech_udp::MacAddress::new(&[0, 0, 0, 0, 0, 0, 0, 0]));
-
-                let sender = self.udp_sender.clone();
-                // we are not in an async context so we must spawn this off
-                tokio::task::spawn(async move { sender.send(ack.into()).await });
                 Ok(LoraResponse::RxDone(RxQuality::new(-120, 5)))
             }
         }
