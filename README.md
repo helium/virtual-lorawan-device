@@ -43,11 +43,20 @@ The two devices will transmit and receive their packets via the single packet fo
 
 #### Region
 
-The default region is US915. EU868 is also supported and may be configured in the following way:
+The default region is US915. EU868 or CN470 is also supported and may be configured in the following way:
 
 ```toml
 [device.one]
 region = "EU868"
+[device.one.credentials]
+dev_eui = "3ED43BEF1857EF4B"
+app_eui = "35BEED137AC3344B"
+app_key = "275AD3615ACA47A381E6B79A832CC5AE"
+```
+or
+```toml
+[device.one]
+region = "CN470"
 [device.one.credentials]
 dev_eui = "3ED43BEF1857EF4B"
 app_eui = "35BEED137AC3344B"

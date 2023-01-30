@@ -60,6 +60,7 @@ pub struct Device {
 pub enum Region {
     US915,
     EU868,
+    CN470,
 }
 
 fn default_secs_between_transmits() -> u64 {
@@ -133,6 +134,7 @@ impl FromStr for Region {
         match input {
             "US915" => Ok(Region::US915),
             "EU868" => Ok(Region::EU868),
+            "CN470" => Ok(Region::CN470),
             _ => Err(Error::InvalidRegionString(input.to_string())),
         }
     }

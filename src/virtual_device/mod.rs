@@ -52,6 +52,7 @@ impl VirtualDevice {
         let region: region::Configuration = match region {
             settings::Region::US915 => region::US915::subband(2).into(),
             settings::Region::EU868 => region::EU868::default().into(),
+            settings::Region::CN470 => region::CN470::default().into(),
         };
 
         let device: Device<udp_radio::UdpRadio, LorawanCrypto, 512> = Device::new(
