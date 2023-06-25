@@ -51,6 +51,7 @@ impl VirtualDevice {
         let (radio, receiver, sender) = UdpRadio::new(time, client_tx).await;
         let region: region::Configuration = match region {
             settings::Region::US915 => region::US915::subband(2).into(),
+            settings::Region::AU915 => region::AU915::subband(2).into(),
             settings::Region::EU868 => region::EU868::default().into(),
         };
 

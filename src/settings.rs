@@ -59,6 +59,7 @@ pub struct Device {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum Region {
     US915,
+    AU915,
     EU868,
 }
 
@@ -132,6 +133,7 @@ impl FromStr for Region {
     fn from_str(input: &str) -> std::result::Result<Region, Self::Err> {
         match input {
             "US915" => Ok(Region::US915),
+            "AU915" => Ok(Region::AU915),
             "EU868" => Ok(Region::EU868),
             _ => Err(Error::InvalidRegionString(input.to_string())),
         }
