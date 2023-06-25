@@ -5,11 +5,11 @@
 This utility allows you to run one or more LoRaWAN devices in pure software (ie: virtually).
 It leverages [a Rust-based LoRaWAN device stack](https://github.com/ivajloip/rust-lorawan)
 and implements its "Radio trait" with the [Semtech GWMP over UDP](https://github.com/helium/semtech-udp)
-interface (see `udp_radio.rs`). This allows you to attach to any Semtech GWMP over UDP Host, 
+interface (see `udp_radio.rs`). This allows you to attach to any Semtech GWMP over UDP Host,
 such as a traditional LoRaWAN Network Server (LNS), [Helium Miner](https://github.com/helium/miner),
 or the [Helium Light Hotspot](https://github.com/helium/gateway-rs).
 
-To the Semtech GWMP over UDP Host, the default configuration of this utility looks like a 
+To the Semtech GWMP over UDP Host, the default configuration of this utility looks like a
 single packet forwarder with one or more devices. It is possible to configure many packet
 forwarders with many different hosts as well. PLease see the configuration examples below.
 
@@ -87,5 +87,22 @@ app_key = "275AD3615ACB47AA81E6B79A832CC5AE"
 
 In this configuration, we've created two packet forwarders and attached one device to each. In addition,
 we've given them different `server` labels. This will put their data reported to Prometheus under different
-labels.  
+labels.
 The transmit time of device `one` is also set to 120 seconds.
+
+### Example to build project with docker
+```sh
+docker buildx build . -t virtual-lorawan-device:latest
+```
+
+### Example docker compose
+```yml
+version: '3'
+services:
+  lorawan-virtual-devices:
+    image: virtual-lorawan-device:latest
+    container_name: lorawan-virtual-device
+    restart: unless-stopped
+    volumes:
+      - ./settings/default.toml:/etc/virtual-lorawan-device/default.toml
+```
