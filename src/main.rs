@@ -77,7 +77,6 @@ async fn main() -> Result<()> {
         } else {
             &settings.default_server
         });
-
         if let Some((_udp_runtime, client_tx, _client_rx, senders)) =
             pf_map.get_mut(packet_forwarder)
         {
@@ -173,7 +172,7 @@ async fn packet_muxer(
                     if let Some(scheduled_time) = downlink.pull_resp.data.txpk.time.tmst() {
                         let time = instant.elapsed().as_micros() as u32;
                         if scheduled_time > time {
-                            let downlink = Box::new(downlink).clone();
+                            let downlink = Box::new(downlink);
                             let delay = scheduled_time - time;
                             for sender in &senders {
                                 let sender = sender.clone();

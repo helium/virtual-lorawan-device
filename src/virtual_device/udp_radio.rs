@@ -108,16 +108,18 @@ impl radio::PhyRxTx for UdpRadio {
             radio::Event::TxRequest(tx_config, buffer) => {
                 let size = buffer.len() as u64;
                 let tmst = self.time.elapsed().as_micros() as u32;
-                info!("Transmit tmst: {}", tmst);
                 let settings = Settings::from(tx_config);
                 let mut data = Vec::new();
+                let datr = settings.get_datr();
+                let freq = settings.get_freq();
+                info!("Transmit @ {tmst} on {freq} Hz {datr:?}");
                 data.extend_from_slice(buffer);
                 let rxpk = RxPkV1 {
                     chan: 0,
                     codr: settings.get_codr(),
                     data,
-                    datr: settings.get_datr(),
-                    freq: settings.get_freq(),
+                    datr,
+                    freq,
                     lsnr: 5.5,
                     modu: semtech_udp::Modulation::LORA,
                     rfch: 0,
@@ -181,9 +183,9 @@ impl Default for Settings {
         Settings {
             rfconfig: radio::RfConfig {
                 frequency: 903000000,
-                bandwidth: lorawan_device::radio::Bandwidth::_125KHz,
-                spreading_factor: lorawan_device::radio::SpreadingFactor::_7,
-                coding_rate: lorawan_device::radio::CodingRate::_4_5,
+                bandwidth: radio::Bandwidth::_125KHz,
+                spreading_factor: radio::SpreadingFactor::_7,
+                coding_rate: radio::CodingRate::_4_5,
             },
         }
     }
