@@ -1,9 +1,8 @@
 use super::*;
 
 use lorawan::default_crypto::DefaultFactory as LorawanCrypto;
-use lorawan_device::{
-    radio, region, Device, Event as LorawanEvent, JoinMode, Response as LorawanResponse,
-};
+use lorawan_device::region::Configuration;
+use lorawan_device::{radio, Device, Event as LorawanEvent, JoinMode, Response as LorawanResponse};
 use semtech_udp::client_runtime::DownlinkRequest;
 use tokio::time::{sleep, Duration};
 use udp_radio::UdpRadio;
@@ -12,7 +11,7 @@ mod udp_radio;
 
 pub struct VirtualDevice {
     label: String,
-    device: Device<UdpRadio, LorawanCrypto, 512>,
+    device: Device<UdpRadio, LorawanCrypto, rand::rngs::OsRng, 512>,
     receiver: mpsc::Receiver<IntermediateEvent>,
     sender: mpsc::Sender<IntermediateEvent>,
     metrics_sender: metrics::Sender,
@@ -49,21 +48,27 @@ impl VirtualDevice {
         region: settings::Region,
     ) -> Result<(PacketSender, VirtualDevice)> {
         let (radio, receiver, sender) = UdpRadio::new(time, client_tx).await;
-        let region: region::Configuration = match region {
-            settings::Region::US915 => region::US915::subband(2).into(),
-            settings::Region::AU915 => region::AU915::subband(2).into(),
-            settings::Region::EU868 => region::EU868::default().into(),
+
+        let region = match region {
+            settings::Region::AU915 => lorawan_device::Region::AU915,
+            settings::Region::AS923_1 => lorawan_device::Region::AS923_1,
+            settings::Region::AS923_2 => lorawan_device::Region::AS923_2,
+            settings::Region::AS923_3 => lorawan_device::Region::AS923_3,
+            settings::Region::AS923_4 => lorawan_device::Region::AS923_4,
+            settings::Region::EU433 => lorawan_device::Region::EU433,
+            settings::Region::EU868 => lorawan_device::Region::EU868,
+            settings::Region::US915 => lorawan_device::Region::US915,
         };
 
-        let device: Device<udp_radio::UdpRadio, LorawanCrypto, 512> = Device::new(
-            region,
+        let device: Device<UdpRadio, LorawanCrypto, rand::rngs::OsRng, 512> = Device::new(
+            Configuration::new(region),
             JoinMode::OTAA {
                 deveui: credentials.deveui_cloned_into_buf()?,
                 appeui: credentials.appeui_cloned_into_buf()?,
                 appkey: credentials.appkey_cloned_into_buf()?,
             },
             radio,
-            rand::random::<u32>,
+            rand::rngs::OsRng,
         );
 
         Ok((
@@ -126,20 +131,10 @@ impl VirtualDevice {
                         lorawan.send(&data, fport, confirmed)
                     }
                     // at this level, the RadioEvent is being delivered in the appropriate window
-                    IntermediateEvent::RadioEvent(frame, time_received) => {
-                        frame
-                            .pull_resp
-                            .data
-                            .txpk
-                            .time
-                            .tmst()
-                            .map(|tmst| tmst as i64 - time_received as i64);
-                        lorawan
-                            .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame)))
-                    }
+                    IntermediateEvent::RadioEvent(frame, _time_received) => lorawan
+                        .handle_event(LorawanEvent::RadioEvent(radio::Event::PhyEvent(frame))),
                 }
             };
-            //lorawan = new_state;
             let (send_uplink, confirmed) = {
                 let (mut send_uplink, mut confirmed) = (false, true);
                 match response {

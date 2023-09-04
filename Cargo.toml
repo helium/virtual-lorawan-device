@@ -16,7 +16,7 @@ log = "0"
 lorawan = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 lorawan-device = { git = "https://github.com/ivajloip/rust-lorawan.git" }
 prometheus = "0"
-semtech-udp = { git = "https://github.com/helium/semtech-udp.git", features = ["client"] }
+semtech-udp = { version = "0.11", features = ["client"] }
 serde = "1"
 structopt = "0"
 thiserror = "1"

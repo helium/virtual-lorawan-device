@@ -58,9 +58,14 @@ pub struct Device {
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum Region {
-    US915,
+    AS923_1,
+    AS923_2,
+    AS923_3,
+    AS923_4,
     AU915,
+    EU433,
     EU868,
+    US915,
 }
 
 fn default_secs_between_transmits() -> u64 {
