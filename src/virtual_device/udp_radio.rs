@@ -1,3 +1,4 @@
+use log::info;
 use lorawan_device::{radio, Timings};
 use semtech_udp::client_runtime::{ClientTx, DownlinkRequest};
 use semtech_udp::{Bandwidth, CodingRate, DataRate, SpreadingFactor};
@@ -109,13 +110,16 @@ impl radio::PhyRxTx for UdpRadio {
                 let tmst = self.time.elapsed().as_micros() as u32;
                 let settings = Settings::from(tx_config);
                 let mut data = Vec::new();
+                let datr = settings.get_datr();
+                let freq = settings.get_freq();
+                info!("Transmit @ {tmst} on {freq} Hz {datr:?}");
                 data.extend_from_slice(buffer);
                 let rxpk = RxPkV1 {
                     chan: 0,
                     codr: settings.get_codr(),
                     data,
-                    datr: settings.get_datr(),
-                    freq: settings.get_freq(),
+                    datr,
+                    freq,
                     lsnr: 5.5,
                     modu: semtech_udp::Modulation::LORA,
                     rfch: 0,
