@@ -1,0 +1,82 @@
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+name: docker
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Setup | Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Setup | Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup | Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Setup | Tools
+        run: sudo apt-get install -y protobuf-compiler libtss2-dev
+
+      - name: Setup | Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build | Hygiene
+        run: |
+          cargo fmt  -- --check
+          cargo clippy --all-features -- -D clippy::all
+
+      - name: Build | Test
+        run: |
+          cargo test
+
+  docker_build:
+    # Ensure we don't publish images until we pass clippy.
+    needs: [hygiene]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup | Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.11.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Setup | Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup | Docker
+        uses: docker/setup-buildx-action@v2
+        with:
+          platforms: linux/amd64
+
+      - name: Setup | Quay.io
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_MINER_USER }}
+          password: ${{ secrets.QUAY_MINER_UPLOAD_TOKEN }}
+
+      - name: Setup | Image Tag
+        if: github.event_name != 'pull_request'
+        run: echo "image_tag=$(git describe)" >> $GITHUB_ENV
+
+      # We publish all builds to the test-images repo.
+      - name: Build | Test Image
+        uses: docker/build-push-action@v3
+        with:
+          push: true
+          platforms: linux/amd64
+          labels: VERSION=${{ env.image_tag }}
+          tags: quay.io/team-helium/test-images:virtual-lorawan-device-${{ env.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
